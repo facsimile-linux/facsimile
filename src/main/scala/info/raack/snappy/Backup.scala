@@ -80,6 +80,7 @@ object Backup {
           var completed: Long = 0
           var latestPercent: Long = 0
           var latestTime = System.currentTimeMillis()
+          var startTime = System.currentTimeMillis()
 
           def printCompletion(newTotal: Long): Unit = {
             if (total != newTotal) {
@@ -90,11 +91,15 @@ object Backup {
 
             val percent = 100 * completed / total
             if (percent != latestPercent) {
+              // do some kind of estimated time smoothing based on amount of time to complete percentage so far
               val newLatestTime = System.currentTimeMillis()
-              val millisPerPercent = (newLatestTime - latestTime) / (percent - latestPercent)
               val percentToComplete = 100 - percent
-              val millisToComplete = percentToComplete * millisPerPercent
-              val minutesToComplete = millisToComplete / 60000
+              val incrementalMillisPerPercent = (newLatestTime - latestTime) / (percent - latestPercent)
+              val incrementalMillisToComplete = percentToComplete * incrementalMillisPerPercent
+              val totalMillisPerPercent = (newLatestTime - startTime) / percent
+              val totalMillisToComplete = percentToComplete * totalMillisPerPercent
+              println(s"total millis to complete: $totalMillisToComplete; incremental millis to complete: $incrementalMillisToComplete")
+              val minutesToComplete = (totalMillisToComplete + incrementalMillisToComplete) / 120000
 
               latestPercent = percent
               latestTime = newLatestTime
