@@ -94,7 +94,7 @@ object Backup {
               val millisPerPercent = (newLatestTime - latestTime) / (percent - latestPercent)
               val percentToComplete = 100 - percent
               val millisToComplete = percentToComplete * millisPerPercent
-              val minutesToComplete = BigDecimal(millisToComplete / 60000.0).setScale(1, BigDecimal.RoundingMode.HALF_UP)
+              val minutesToComplete = millisToComplete / 60000
 
               latestPercent = percent
               latestTime = newLatestTime
