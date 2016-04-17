@@ -49,30 +49,38 @@ object Backup {
           // backup
 
           val defaultExcludes = Seq(".gvfs", ".cache/*", ".thumbnails*", "[Tt]rash*",
-            "*.backup*", "*~", ".dropbox*", "/proc/*", "/sys/*",
-            "/dev/*", "/run/*", "/etc/mtab",
+            "*.backup*", "*~", ".dropbox*", "/proc", "/sys",
+            "/dev", "/run", "/etc/mtab", "/media", "/net",
             "/var/cache/apt/archives/*.deb", "lost+found/*",
-            "/tmp/*", "/var/tmp/*", "/var/backups/*", ".Private")
+            "/tmp", "/var/tmp", "/var/backups", ".Private", mountDir)
 
-          val customExcludes = Seq("/backup", "/backupmount", "/net", "/sshfs", "/media", "/var/lib/mlocate/*", ".recoll/xapiandb", ".gconf.old/system/networking/connections", ".local/share/zeitgeist.old", "/nfs", mountDir)
+          val customExcludes = Seq("/backup", "/backupmount", "/sshfs", "/var/lib/mlocate/*", ".recoll/xapiandb", ".gconf.old/system/networking/connections", ".local/share/zeitgeist.old")
+
+          val allExcludes = (defaultExcludes ++ customExcludes)
 
           val path = Files.createTempFile("snappy", "config")
 
-          Files.write(path, (defaultExcludes ++ customExcludes).mkString("\n").getBytes)
+          Files.write(path, allExcludes.mkString("\n").getBytes)
 
           val command = s"sudo /usr/bin/rsync -aHAv --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
 
           println(command)
 
-          def logstdout(line: String): Unit = { println("stdout " + line) }
-          def logstderr(line: String): Unit = { println("stderr " + line) }
-
-          val incrementalPattern = """.*ir-chk=(\d+)\/(\d+).*""".r
-          val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
-
-          var current: Long = 0
           // TODO - in else clause, use number of inodes on system to estimate total number of files
-          var total: Long = Try { Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total")).toString.toLong }.getOrElse(0)
+          var total: Long = Try {
+            // try to read file total from previous file total
+            new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"))).toLong
+          }.getOrElse({
+            // find number of inodes
+            val pattern = """([\w/]+)\s+(\d+)""".r
+            Process("/bin/df --output=target,iused").lineStream
+              .flatMap(_ match { case pattern(one, two) => Some((one, two.toLong)); case _ => None })
+              .filterNot(item => allExcludes.contains(item._1))
+              .map(_._2)
+              .sum
+          })
+
+          var currentRemaining: Long = total
 
           var latestPercent = ""
           def printCompletion(newTotal: Long): Unit = {
@@ -83,7 +91,7 @@ object Backup {
             val percent = if (total == 0) {
               "calculating..."
             } else {
-              val percent = current / total
+              val percent = Math.max(0, 100 - currentRemaining) / total
               s"${percent}%"
             }
             val newPercent = s"Percent complete: ${percent}"
@@ -93,10 +101,14 @@ object Backup {
             }
           }
 
+          val incrementalPattern = """.*xfr#(\d+),\sir-chk=.*""".r
+          val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
+
+          printCompletion(total)
           val output = Process(command).lineStream(ProcessLogger(line => ())).foreach(line => {
             line match {
-              case incrementalPattern(part, total) => { current = part.toLong; printCompletion(0) }
-              case totalPattern(part, newTotal) => { current = part.toLong; printCompletion(newTotal.toLong) }
+              case incrementalPattern(complete) => { currentRemaining = total - complete.toLong; printCompletion(total) }
+              case totalPattern(remain, newTotal) => { println(s"total: $remain $newTotal"); currentRemaining = remain.toLong; printCompletion(newTotal.toLong) }
               case _ => ()
             }
           })
