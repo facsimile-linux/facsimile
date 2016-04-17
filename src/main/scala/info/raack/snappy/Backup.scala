@@ -68,11 +68,12 @@ object Backup {
             new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"))).toLong
           }.getOrElse({
             // find number of inodes
-            val pattern = """([\w/]+)\s+(\d+)""".r
-            Process("/bin/df --output=target,iused").lineStream
-              .flatMap(_ match { case pattern(one, two) => Some((one, two.toLong)); case _ => None })
+            val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
+            Process("/bin/df --output=target,fstype,iused").lineStream
+              .flatMap(_ match { case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
               .filterNot(item => allExcludes.contains(item._1))
-              .map(_._2)
+              .filterNot(item => Seq("ecryptfs").contains(item._2))
+              .map(_._3)
               .sum
           })
 
@@ -97,10 +98,12 @@ object Backup {
             }
           }
 
-          val incrementalPattern = """.*ir-chk=.*""".r
+          val incrementalPattern = """.*(ir-chk)=.*""".r
           val totalPattern = """.*to-chk=\d+\/(\d+).*""".r
-          val uptodate = """.*uptodate""".r
+          val uptodate = """.*(uptodate).*""".r
+          val hidingfile = """.*(hiding file).*""".r
 
+          println(s"total files to transfer: $total")
           printCompletion(total)
 
           val command = s"sudo /usr/bin/rsync -aHAvv --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
@@ -108,7 +111,7 @@ object Backup {
           println(command)
           val output = Process(command).lineStream(ProcessLogger(line => ())).foreach(line => {
             line match {
-              case incrementalPattern(_) | uptodate(_) => { completed += 1; printCompletion(total) }
+              case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { completed += 1; printCompletion(total) }
               case totalPattern(newTotal) => { completed += 1; printCompletion(newTotal.toLong) }
               case others => {}
             }
