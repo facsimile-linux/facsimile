@@ -62,10 +62,6 @@ object Backup {
 
           Files.write(path, allExcludes.mkString("\n").getBytes)
 
-          val command = s"sudo /usr/bin/rsync -aHAv --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
-
-          println(command)
-
           // TODO - in else clause, use number of inodes on system to estimate total number of files
           var total: Long = Try {
             // try to read file total from previous file total
@@ -80,18 +76,18 @@ object Backup {
               .sum
           })
 
-          var currentRemaining: Long = total
-
+          var completed: Long = 0
           var latestPercent = ""
           def printCompletion(newTotal: Long): Unit = {
             if (total != newTotal) {
+              println(s"new total: $newTotal")
               Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"), newTotal.toString.getBytes)
               total = newTotal
             }
             val percent = if (total == 0) {
               "calculating..."
             } else {
-              val percent = Math.max(0, 100 - currentRemaining) / total
+              val percent = 100 * completed / total
               s"${percent}%"
             }
             val newPercent = s"Percent complete: ${percent}"
@@ -101,15 +97,20 @@ object Backup {
             }
           }
 
-          val incrementalPattern = """.*xfr#(\d+),\sir-chk=.*""".r
-          val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
+          val incrementalPattern = """.*ir-chk=.*""".r
+          val totalPattern = """.*to-chk=\d+\/(\d+).*""".r
+          val uptodate = """.*uptodate""".r
 
           printCompletion(total)
+
+          val command = s"sudo /usr/bin/rsync -aHAvv --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
+
+          println(command)
           val output = Process(command).lineStream(ProcessLogger(line => ())).foreach(line => {
             line match {
-              case incrementalPattern(complete) => { currentRemaining = total - complete.toLong; printCompletion(total) }
-              case totalPattern(remain, newTotal) => { println(s"total: $remain $newTotal"); currentRemaining = remain.toLong; printCompletion(newTotal.toLong) }
-              case _ => ()
+              case incrementalPattern(_) | uptodate(_) => { completed += 1; printCompletion(total) }
+              case totalPattern(newTotal) => { completed += 1; printCompletion(newTotal.toLong) }
+              case others => {}
             }
           })
 
