@@ -1,0 +1,202 @@
+<scalastyle commentFilter="enabled">
+ <name>Scalastyle standard configuration</name>
+ <!-- Created from best pratices from scalastyle.org and https://github.com/databricks/scala-style-guide -->
+ <!-- Some people say that tabs are evil -->
+ <check level="warning" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
+ <!-- Max file length - 1500 lines - to prevent monster classes -->
+ <check level="warning" class="org.scalastyle.file.FileLengthChecker" enabled="true">
+  <parameters>
+   <parameter name="maxFileLength"><![CDATA[1500]]></parameter>
+  </parameters>
+ </check>
+ <!-- Do we require any copyright notices or anything? We can check for them here -->
+ <check level="warning" class="org.scalastyle.file.HeaderMatchesChecker" enabled="false">
+  <parameters>
+   <parameter name="header"><![CDATA[// Groupon copyright notice?]]></parameter>
+  </parameters>
+ </check>
+ <!-- Spaces before and after plus signs - promotes readability -->
+ <check level="warning" class="org.scalastyle.scalariform.SpacesBeforePlusChecker" enabled="true"></check>
+ <check level="warning" class="org.scalastyle.scalariform.SpacesAfterPlusChecker" enabled="true"></check>
+ <!-- No whitespace at end of line - recommended for less diff churn -->
+ <check level="warning" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="true"></check>
+ <!-- Max line length - promotes readibility and lessens need to scroll -->
+ <!-- ignore line length limit on import statements -->
+ <check level="warning" class="org.scalastyle.file.FileLineLengthChecker" enabled="true">
+  <parameters>
+   <parameter name="maxLineLength"><![CDATA[120]]></parameter>
+   <parameter name="tabSize"><![CDATA[2]]></parameter>
+   <parameter default="true" type="boolean" name="ignoreImports"/>
+  </parameters>
+ </check>
+ <!-- Check that classes and objects are named in CamelCase -->
+ <check level="warning" class="org.scalastyle.scalariform.ClassNamesChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[[A-Z][A-Za-z]*]]></parameter>
+  </parameters>
+ </check>
+ <check level="warning" class="org.scalastyle.scalariform.ObjectNamesChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[[A-Z][A-Za-z]*]]></parameter>
+  </parameters>
+ </check>
+ <!-- Check that package objects are named in all-lowercase ASCII -->
+ <check level="warning" class="org.scalastyle.scalariform.PackageObjectNamesChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[^[a-z]*$]]></parameter>
+  </parameters>
+ </check>
+ <!-- Ensure that hashcode() and equals() are either both defined or both not defined - big source of bugs otherwise -->
+ <check level="warning" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="true"></check>
+ <!-- Prevent from using bad class (just Sun internals) -->
+ <check level="warning" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
+  <parameters>
+   <parameter name="illegalImports"><![CDATA[sun._,java.awt._]]></parameter>
+  </parameters>
+ </check>
+ <!-- Prevent more than 8 parameters to a method -->
+ <check level="warning" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
+  <parameters>
+   <parameter name="maxParameters"><![CDATA[8]]></parameter>
+  </parameters>
+ </check>
+ <!-- Magic numbers should be replaced with named constants to make code easier to read, understand - can also eliminate subtle bugs -->
+ <check level="warning" class="org.scalastyle.scalariform.MagicNumberChecker" enabled="true">
+  <parameters>
+   <parameter name="ignore"><![CDATA[-1,0,1,2,3]]></parameter>
+  </parameters>
+ </check>
+ <!-- No whitespace before or after brackets [] - can be confusing for readers -->
+ <check level="warning" class="org.scalastyle.scalariform.NoWhitespaceBeforeLeftBracketChecker" enabled="true"></check>
+ <check level="warning" class="org.scalastyle.scalariform.NoWhitespaceAfterLeftBracketChecker" enabled="true"></check>
+ <!-- returns are not necessary, and can discourage functional styles of programming -->
+ <!-- two cases are suggested in closures only - to guard control flow without indentation, and to terminate a loop early -->
+ <!-- see: https://github.com/databricks/scala-style-guide#return -->
+ <check level="warning" class="org.scalastyle.scalariform.ReturnChecker" enabled="true"></check>
+ <!-- three space indentation -->
+ <check enabled="true" class="org.scalastyle.file.IndentationChecker" level="warning">
+  <parameters>
+   <parameter name="tabSize">2</parameter>
+  </parameters>
+ </check>
+ <!-- Use Option rather than null in Scala in most cases -->
+ <!-- In performance oriented code, nulls can be better - https://github.com/databricks/scala-style-guide#perf-option -->
+ <check level="warning" class="org.scalastyle.scalariform.NullChecker" enabled="true"></check>
+ <!-- Don't use clone. It's very hard to get right. Check out Josh Bloch's comments on this in Effective Java. -->
+ <check level="warning" class="org.scalastyle.scalariform.NoCloneChecker" enabled="true"></check>
+ <!-- finalize is called during GC, and GC isn't ever guaranteed (happens often, not always) -->
+ <check level="warning" class="org.scalastyle.scalariform.NoFinalizeChecker" enabled="true"></check>
+ <!-- Don't implement equals() without implementing equals(java.lang.Object) - subtle source of bugs -->
+ <check level="warning" class="org.scalastyle.scalariform.CovariantEqualsChecker" enabled="true"></check>
+ <!-- Structual types in Scala use reflection and can have performance penalties. Beware. -->
+ <check level="warning" class="org.scalastyle.scalariform.StructuralTypeChecker" enabled="true"></check>
+ <!-- Not a good idea to use println generally - use some other logging framework if possible -->
+ <check level="warning" class="org.scalastyle.file.RegexChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[println]]></parameter>
+  </parameters>
+ </check>
+ <!-- Too many classes / objects in a file can make the code hard to understand. Limit to 30 -->
+ <check level="warning" class="org.scalastyle.scalariform.NumberOfTypesChecker" enabled="true">
+  <parameters>
+   <parameter name="maxTypes"><![CDATA[30]]></parameter>
+  </parameters>
+ </check>
+ <!-- Check for "complex" code - not sure how this works, but it's recommended... -->
+ <check level="warning" class="org.scalastyle.scalariform.CyclomaticComplexityChecker" enabled="true">
+  <parameters>
+   <parameter name="maximum"><![CDATA[10]]></parameter>
+  </parameters>
+ </check>
+ <!-- a lowercase l often looks like the number 1 - use uppercase L for literals -->
+ <check level="warning" class="org.scalastyle.scalariform.UppercaseLChecker" enabled="true"></check>
+ <!-- Simplify boolean expressions - not sure how this works, but it's recommended... -->
+ <check level="warning" class="org.scalastyle.scalariform.SimplifyBooleanExpressionChecker" enabled="true"></check>
+ <!-- Use curly braces around single line if statements -->
+ <!-- (only exception is if you are using if/else as an one-line ternary operator that is also side-effect free) -->
+ <check level="warning" class="org.scalastyle.scalariform.IfBraceChecker" enabled="true">
+  <parameters>
+   <parameter name="singleLineAllowed"><![CDATA[true]]></parameter>
+   <parameter name="doubleLineAllowed"><![CDATA[false]]></parameter>
+  </parameters>
+ </check>
+ <!-- No more than 30 lines per method -->
+ <check level="warning" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="true">
+  <parameters>
+   <parameter name="maxLength"><![CDATA[30]]></parameter>
+  </parameters>
+ </check>
+ <!-- Method names should be in camelCase style, but allow method names which override poorly named methods to be ignored -->
+ <check level="warning" class="org.scalastyle.scalariform.MethodNamesChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[^[a-z][A-Za-z0-9]*$]]></parameter>
+   <parameter name="ignoreOverride">true</parameter>
+  </parameters>
+ </check>
+ <!-- No more than 30 methods per class -->
+ <check level="warning" class="org.scalastyle.scalariform.NumberOfMethodsInTypeChecker" enabled="true">
+  <parameters>
+   <parameter name="maxMethods"><![CDATA[30]]></parameter>
+  </parameters>
+ </check>
+ <!-- A public method declared on a type is effectively an API declaration. -->
+ <!-- Explicitly declaring a return type means that other code which depends on that type won’t break unexpectedly. -->
+ <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"/>
+ <!-- The ??? operator denotes that an implementation is missing. -->
+ <!-- This rule helps to avoid potential runtime errors because of not implemented code. -->
+ <check level="warning" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true" />
+ <!-- Block imports can lead to annoying merge errors in large code bases that are maintained by lot of developers. -->
+ <!-- This rule allows to ensure that only single imports are used in order to minimize merge errors in import declarations. -->
+ <check level="warning" class="org.scalastyle.scalariform.BlockImportChecker" enabled="false"/>
+ <!-- Use braces in comprehensions based on style guide - see http://www.scalastyle.org/rules-0.7.0.html#org_scalastyle_scalariform_ForBraceChecker -->
+ <check level="warning" class="org.scalastyle.scalariform.ForBraceChecker" enabled="true"/>
+ <!-- To bring consistency with how comments should be formatted, leave a space right after the beginning of the comment. -->
+ <check level="warning" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker" enabled="true"/>
+ <!-- Field names should be camelCase -->
+ <check level="warning" class="org.scalastyle.scalariform.FieldNamesChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[^[a-z][1-9A-Za-z]*$]]></parameter>
+  </parameters>
+ </check>
+ <!-- While loops are deprecated in functional style -->
+ <check level="warning" class="org.scalastyle.scalariform.WhileChecker" enabled="true"></check>
+ <!-- Mutable fields (var) are deprecated in functional style -->
+ <check level="warning" class="org.scalastyle.scalariform.VarFieldChecker" enabled="true"></check>
+ <!-- Mutable loca variables (var) in loops are deprecated in functional style -->
+ <check level="warning" class="org.scalastyle.scalariform.VarLocalChecker" enabled="true"></check>
+ <!-- If expressions with boolean constants in both branches can be eliminated without affecting readability. -->
+ <!-- Prefer simply cond to if (cond) true else false and !cond to if (cond) false else true. -->
+ <check level="warning" class="org.scalastyle.scalariform.RedundantIfChecker" enabled="true"></check>
+ <!-- Prevent println -->
+ <check level="warning" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[println]]></parameter>
+  </parameters>
+ </check>
+ <!-- Use Scala @deprecated rather than Java @Deprecated -->
+ <check level="warning" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
+ <!-- If a class / trait has no members, then braces are unnecessary, and can be removed. -->
+ <check level="warning" class="org.scalastyle.scalariform.EmptyClassChecker" enabled="true"></check>
+ <!-- Scala generic type names are generally single upper case letters. This check checks for classes and traits. -->
+ <check level="warning" class="org.scalastyle.scalariform.ClassTypeParameterChecker" enabled="true">
+  <parameters>
+   <parameter name="regex"><![CDATA[^[A-Z_]$]]></parameter>
+  </parameters>
+ </check>
+ <!-- Importing all classes from a package or static members from a class leads to tight coupling between packages or classes
+   and might lead to problems when a new version of a library introduces name clashes. Wildcard imports make the code less robust to external changes.-->
+ <check level="error" class="org.scalastyle.scalariform.UnderscoreImportChecker" enabled="true"></check>
+ <!-- A lower case pattern match clause with no other tokens is the same as _; this is not true for patterns which start with an upper case letter.
+ This can cause confusion, and may not be what was intended. -->
+ <check level="warning" class="org.scalastyle.scalariform.LowercasePatternMatchChecker" enabled="true"></check>
+ <!-- Code duplication makes maintenance more difficult, so it can be better to replace the multiple occurrences with a constant. -->
+ <check level="warning" class="org.scalastyle.scalariform.MultipleStringLiteralsChecker" enabled="true">
+  <parameters>
+   <parameter name="allowed"><![CDATA[2]]></parameter>
+   <parameter name="ignoreRegex"><![CDATA[^""$]]></parameter>
+  </parameters>
+ </check>
+ <!-- Don't spread imports throughout the file. -->
+ <!-- If imports are spread throughout the file, knowing what is in scope at any one place can be difficult to work out. -->
+ <check level="warning" class="org.scalastyle.scalariform.ImportGroupingChecker" enabled="true"></check>
+</scalastyle>
