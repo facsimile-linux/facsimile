@@ -78,23 +78,27 @@ object Backup {
           })
 
           var completed: Long = 0
-          var latestPercent = ""
+          var latestPercent: Long = 0
+          var latestTime = System.currentTimeMillis()
+
           def printCompletion(newTotal: Long): Unit = {
             if (total != newTotal) {
               println(s"new total: $newTotal")
               Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"), newTotal.toString.getBytes)
               total = newTotal
             }
-            val percent = if (total == 0) {
-              "calculating..."
-            } else {
-              val percent = 100 * completed / total
-              s"${percent}%"
-            }
-            val newPercent = s"Percent complete: ${percent}"
-            if (newPercent != latestPercent) {
-              latestPercent = newPercent
-              println(latestPercent)
+
+            val percent = 100 * completed / total
+            if (percent != latestPercent) {
+              val newLatestTime = System.currentTimeMillis()
+              val millisPerPercent = (newLatestTime - latestTime) / (percent - latestPercent)
+              val percentToComplete = 100 - percent
+              val millisToComplete = percentToComplete * millisPerPercent
+              val minutesToComplete = BigDecimal(millisToComplete / 60000.0).setScale(1, BigDecimal.RoundingMode.HALF_UP)
+
+              latestPercent = percent
+              latestTime = newLatestTime
+              println(s"Percent complete: ${percent}% ($minutesToComplete minutes estimated remaining)")
             }
           }
 
