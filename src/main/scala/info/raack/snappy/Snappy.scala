@@ -30,7 +30,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
     Backup.process(sourceFilesystem, targetHost, targetFilesystem)
   }
 
-  def getSnapshots(): Seq[Snapshot] = {
-    Seq()
+  def snapshots(): Seq[Snapshot] = {
+    Backup.snapshots
   }
 }

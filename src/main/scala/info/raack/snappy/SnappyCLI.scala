@@ -21,6 +21,10 @@ package info.raack.snappy
 
 object SnappyCLI extends App {
 
-  new Snappy().backup()
-
+  val snappy = new Snappy()
+  
+  snappy.backup()
+  
+  println("Current snapshots:")
+  snappy.snapshots.foreach(println)
 }

@@ -31,6 +31,7 @@ import scala.sys.process.ProcessLogger
 import scala.util.Try
 
 object Backup {
+  // TODO - allow status callbacks so CLI can have information and print it there
   def process(source: Filesystem, target: Host, destination: Filesystem): Unit = {
 
     (source, destination) match {
@@ -178,7 +179,9 @@ object Backup {
           println(command2)
           val output2 = command2 !!
 
-          val command3 = "ssh root@backup zfs list -t snapshot"
+          val command3 = "ssh storage zfs list -t snapshot"
+          
+          // TODO - remove old snapshots
 
           println(command3)
           command3 !!
@@ -193,5 +196,9 @@ object Backup {
         }
       }
     }
+  }
+  
+  def snapshots(): Seq[String] = {
+    
   }
 }
