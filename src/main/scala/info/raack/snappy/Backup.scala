@@ -19,6 +19,7 @@
 
 package info.raack.snappy
 
+import java.io.FileWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.FileSystems
@@ -42,7 +43,13 @@ object Backup {
           // mount zfs
           //"sudo zpool import -d /home/traack/testbackup traackbackup" !!
 
-          var mountDir = "/tmp/newbackup3"
+          // TODO - try fakesuper send and restore of single test file to ensure that xattrs can be stored
+          // if not, ask if they can login as root
+          // if not, warn user that backup and restore will take longer than necessary until they can enable xattrs for
+          // the destination filesystem OR they can login as root
+          
+
+          var mountDir = "traack@transmission:/mnt/tank/backup/lune-rsnapshot/backup/localhost"
           //val one = s"mkdir -p $mountDir" !!
           //val two = s"sudo sshfs root@backup:/mnt/tank/backup/lune-rsnapshot/backup/localhost/ $mountDir" !!
 
@@ -62,12 +69,11 @@ object Backup {
 
           Files.write(path, allExcludes.mkString("\n").getBytes)
 
-          // TODO - in else clause, use number of inodes on system to estimate total number of files
           var total: Long = Try {
             // try to read file total from previous file total
             new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"))).toLong
           }.getOrElse({
-            // find number of inodes
+            // find number of inodes on system to estimate total number of files
             val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
             Process("/bin/df --output=target,fstype,iused").lineStream
               .flatMap(_ match { case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
@@ -82,24 +88,42 @@ object Backup {
           var latestTime = System.currentTimeMillis()
           var startTime = System.currentTimeMillis()
 
+          val lastTotalMillis = Try {
+            Some(new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"))).toLong)
+          }.getOrElse(None)
+
+          println(s"last total millis: $lastTotalMillis")
+
           def printCompletion(newTotal: Long): Unit = {
             if (total != newTotal) {
               println(s"new total: $newTotal")
-              Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"), newTotal.toString.getBytes)
               total = newTotal
             }
 
+            
+            // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
+            
             val percent = 100 * completed / total
             if (percent != latestPercent) {
               // do some kind of estimated time smoothing based on amount of time to complete percentage so far
+
+              // smooth with time to complete previous backup as a factor
+              // adjust smoothing weights based on percent completed
+              // previous backup weight = 100 - percent
+              // current backup weight = percent
+              // current percent weight = 25 ( might be 0, as how much can only the last percent inform the entire remainder of the backup?)
               val newLatestTime = System.currentTimeMillis()
               val percentToComplete = 100 - percent
               val incrementalMillisPerPercent = (newLatestTime - latestTime) / (percent - latestPercent)
               val incrementalMillisToComplete = percentToComplete * incrementalMillisPerPercent
               val totalMillisPerPercent = (newLatestTime - startTime) / percent
-              val totalMillisToComplete = percentToComplete * totalMillisPerPercent
-              println(s"total millis to complete: $totalMillisToComplete; incremental millis to complete: $incrementalMillisToComplete")
-              val minutesToComplete = (totalMillisToComplete + incrementalMillisToComplete) / 120000
+
+              val totalMillisToComplete = (percentToComplete * totalMillisPerPercent, percent)
+              val previousMillisToComplete: (Long, Long) = lastTotalMillis.map(x => (percentToComplete * x / 100, 100 - percent)).getOrElse((0, 0))
+
+              println(s"previous millis to complete: $previousMillisToComplete; current millis to complete: $totalMillisToComplete; incremental millis to complete: $incrementalMillisToComplete")
+              val minutesToComplete = (totalMillisToComplete._1 * totalMillisToComplete._2 +
+                previousMillisToComplete._1 * previousMillisToComplete._2) / 60000 / (totalMillisToComplete._2 + previousMillisToComplete._2)
 
               latestPercent = percent
               latestTime = newLatestTime
@@ -108,23 +132,44 @@ object Backup {
           }
 
           val incrementalPattern = """.*(ir-chk)=.*""".r
-          val totalPattern = """.*to-chk=\d+\/(\d+).*""".r
+          val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
           val uptodate = """.*(uptodate).*""".r
           val hidingfile = """.*(hiding file).*""".r
+          val rsyncMessage = """rsync:\s(.*)""".r
 
           println(s"total files to transfer: $total")
           printCompletion(total)
+          // -M--fake-super to write user / group information into xattrs
+          // --inplace to not re-write destination file (preserves bits for destination COW)
 
-          val command = s"sudo /usr/bin/rsync -aHAvv --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
+          val command = s"sudo /usr/bin/rsync -aHAvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
 
           println(command)
-          val output = Process(command).lineStream(ProcessLogger(line => ())).foreach(line => {
-            line match {
-              case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { completed += 1; printCompletion(total) }
-              case totalPattern(newTotal) => { completed += 1; printCompletion(newTotal.toLong) }
-              case others => {}
+
+          val fw = new FileWriter("/tmp/backup_output")
+
+          val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
+          try {
+            Process(command).lineStream(ProcessLogger(line => ())).foreach(line => {
+              line match {
+                case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { completed += 1; printCompletion(total) }
+                case totalPattern(toGo, newTotal) => { completed = newTotal.toLong - toGo.toLong; printCompletion(newTotal.toLong) }
+                case rsyncMessage(message) => { rsyncMessages += message }
+                case others => { fw.write(others); fw.write("\n") }
+              }
+            })
+          } catch {
+            case e: Exception => {
+              println(s"Messages from rsync: \n${rsyncMessages.mkString("\n")}")
             }
-          })
+          }
+
+          fw.close()
+
+          val endTime = System.currentTimeMillis()
+
+          Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"), completed.toString.getBytes)
+          Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"), (endTime - startTime).toString.getBytes)
 
           // snapshot
           val time = Instant.now().toString
