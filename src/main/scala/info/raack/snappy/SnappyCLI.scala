@@ -19,12 +19,32 @@
 
 package info.raack.snappy
 
+import scala.io.Source
+
 object SnappyCLI extends App {
 
-  val snappy = new Snappy()
-  
-  snappy.backup()
-  
-  println("Current snapshots:")
-  snappy.snapshots.foreach(println)
+  sys.exit(args.headOption.map(process(_).getOrElse(0)).getOrElse({
+    // wait for commands
+    Source.stdin.getLines.map(process(_)).collectFirst({ case Some(x) => x }).getOrElse(0)
+  }))
+
+  private def process(command: String): Option[Int] = {
+    command match {
+      case "backup" => { new Snappy().backup(); None }
+      case "help" => { println(help); None }
+      case "exit" => { Some(0) }
+      case other => { println(s"$other is not a valid command.\n${help}"); None }
+    }
+  }
+
+  private def help(): String = {
+    """
+Usage: snappy [COMMAND]
+Run Snappy command specified as COMMAND, or enter the Snappy shell if COMMAND is not specified.
+
+Possible values for COMMAND
+  backup                     complete a backup using the current settings
+  help                       print this help
+"""
+  }
 }

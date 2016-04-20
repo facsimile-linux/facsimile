@@ -48,7 +48,6 @@ object Backup {
           // if not, ask if they can login as root
           // if not, warn user that backup and restore will take longer than necessary until they can enable xattrs for
           // the destination filesystem OR they can login as root
-          
 
           var mountDir = "traack@transmission:/mnt/tank/backup/lune-rsnapshot/backup/localhost"
           //val one = s"mkdir -p $mountDir" !!
@@ -77,7 +76,7 @@ object Backup {
             // find number of inodes on system to estimate total number of files
             val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
             Process("/bin/df --output=target,fstype,iused").lineStream
-              .flatMap(_ match { case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
+              .flatMap({ case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
               .filterNot(item => allExcludes.contains(item._1))
               .filterNot(item => Seq("ecryptfs").contains(item._2))
               .map(_._3)
@@ -101,9 +100,8 @@ object Backup {
               total = newTotal
             }
 
-            
             // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
-            
+
             val percent = 100 * completed / total
             if (percent != latestPercent) {
               // do some kind of estimated time smoothing based on amount of time to complete percentage so far
@@ -172,6 +170,7 @@ object Backup {
           Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"), completed.toString.getBytes)
           Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"), (endTime - startTime).toString.getBytes)
 
+          println(s"total transferred: $completed; total rsync said would be transferred: $total")
           // snapshot
           val time = Instant.now().toString
 
@@ -180,7 +179,7 @@ object Backup {
           val output2 = command2 !!
 
           val command3 = "ssh storage zfs list -t snapshot"
-          
+
           // TODO - remove old snapshots
 
           println(command3)
@@ -197,8 +196,8 @@ object Backup {
       }
     }
   }
-  
-  def snapshots(): Seq[String] = {
-    
+
+  def snapshots(): Seq[Snapshot] = {
+    Seq()
   }
 }

@@ -31,6 +31,6 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
   }
 
   def snapshots(): Seq[Snapshot] = {
-    Backup.snapshots
+    Backup.snapshots()
   }
 }
