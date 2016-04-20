@@ -102,7 +102,7 @@ object Backup {
 
             // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
 
-            val percent = 100 * completed / total
+            val percent = if (total > 0) 100 * completed / total else 0
             if (percent != latestPercent) {
               // do some kind of estimated time smoothing based on amount of time to complete percentage so far
 
@@ -141,7 +141,7 @@ object Backup {
           // -M--fake-super to write user / group information into xattrs
           // --inplace to not re-write destination file (preserves bits for destination COW)
 
-          val command = s"sudo /usr/bin/rsync -aHAvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
+          val command = s"sudo /usr/bin/nice -n 19 /usr/bin/rsync -aHAvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
 
           println(command)
 
@@ -149,7 +149,7 @@ object Backup {
 
           val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
           try {
-            Process(command).lineStream(ProcessLogger(line => ())).foreach(line => {
+            Process(command).lineStream(ProcessLogger(line => rsyncMessages += line)).foreach(line => {
               line match {
                 case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { completed += 1; printCompletion(total) }
                 case totalPattern(toGo, newTotal) => { completed = newTotal.toLong - toGo.toLong; printCompletion(newTotal.toLong) }
