@@ -7,6 +7,15 @@ Automatically attaches system info to an existing GitHub issue.
 
 Each commit should include an addition or change to a line in the `debian/changelog` file. Running `dch` will set this up for you in an editor.
 
+#### Ubuntu Versions
+
+* Trusty - comes with Scala 2.9.2
+* Vivid - comes with Scala 2.9.2
+* Wily - comes with Scala 2.11.6
+* Xenial - comes with Scala 2.11.6
+
+Will need to bundle with Scala libraries for Trusty / Vivid, and require that Scala is installed and not bundle for Wily / Xenial.
+
 ### Publishing
 
 * To create a new release candidate branch and release:
