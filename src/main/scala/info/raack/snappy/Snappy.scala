@@ -19,15 +19,45 @@
 
 package info.raack.snappy
 
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.FileSystems
+
+import scala.util.Try
+
 class Snappy(configFile: String = "/etc/snappy.conf") {
+
+  val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "snappy", "scheduled")
+
+  // TODO - use user snappy, which must have root privs to get all data
+  // val schedule = s"0 * * * * traack /usr/bin/snappy backup"
+
+  // TODO - install /var/cache/snappy and /var/lib/snappy directories, owned by snappy user
 
   val (sourceFilesystem, targetHost, targetFilesystem) = {
     (StandardFilesystem(), Host("localhost"), ZFSFilesystem("traackbackup", Some("/home/traack/testbackup"), false))
   }
 
+  def scheduledBackup(): Unit = {
+    if (Files.exists(scheduleFile)) {
+      backup()
+    }
+  }
+
   def backup(): Unit = {
     // check for presence of cron task
-    Backup.process(sourceFilesystem, targetHost, targetFilesystem)
+    Option(new FileOutputStream("/var/lock/snappy").getChannel().tryLock()).map { x =>
+      Backup.process(sourceFilesystem, targetHost, targetFilesystem)
+    }.getOrElse(println("Could not get lock"))
+  }
+
+  def schedule(turnOn: Boolean): Unit = {
+    if (turnOn) {
+      Files.write(scheduleFile, "on".getBytes)
+    } else {
+      Files.delete(scheduleFile)
+    }
   }
 
   def snapshots(): Seq[Snapshot] = {

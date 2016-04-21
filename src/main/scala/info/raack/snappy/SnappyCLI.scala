@@ -30,6 +30,9 @@ object SnappyCLI extends App {
 
   private def process(command: String): Option[Int] = {
     command match {
+      case "scheduled-backup" => { new Snappy().scheduledBackup(); None }
+      case "schedule-on" => { new Snappy().schedule(true); None }
+      case "schedule-off" => { new Snappy().schedule(false); None }
       case "backup" => { new Snappy().backup(); None }
       case "help" => { println(help); None }
       case "exit" => { Some(0) }
