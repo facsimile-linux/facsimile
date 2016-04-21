@@ -16,6 +16,8 @@ Each commit should include an addition or change to a line in the `debian/change
 
 Will need to bundle with Scala libraries for Trusty / Vivid, and require that Scala is installed and not bundle for Wily / Xenial.
 
+To ignore scala classes while assembling fat jar, do: `packExcludeJars := Seq("scala-.*\\.jar"),`
+
 ### Publishing
 
 * To create a new release candidate branch and release:
