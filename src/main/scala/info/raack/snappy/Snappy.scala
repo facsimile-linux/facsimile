@@ -34,6 +34,20 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
   // val schedule = s"0 * * * * traack /usr/bin/snappy backup"
 
   // TODO - install /var/cache/snappy and /var/lib/snappy directories, owned by snappy user
+  
+  // TODO - on install, touch file /var/log/snappy.log and make owned by snappy
+  // TODO - rotate with /etc/logrotate.d/package
+  /*
+   * /var/log/snappy.log {
+         weekly
+         missingok
+         rotate 12
+         compress
+         copytruncate
+         notifempty
+         create 640 snappy adm
+     }
+   */
 
   val (sourceFilesystem, targetHost, targetFilesystem) = {
     (StandardFilesystem(), Host("localhost"), ZFSFilesystem("traackbackup", Some("/home/traack/testbackup"), false))

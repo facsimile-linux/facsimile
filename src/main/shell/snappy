@@ -2,4 +2,4 @@
 
 set -e
 
-/usr/bin/java -cp "/usr/share/snappy/lib/*" info.raack.snappy.SnappyCLI $@
+/usr/bin/java -cp "/usr/share/snappy/lib/*" info.raack.snappy.SnappyCLI $@ >> /var/log/snappy.log 2>&1
