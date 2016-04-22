@@ -31,8 +31,11 @@ import scala.sys.process.ProcessLogger
 import scala.util.Try
 
 object Backup {
+
+  val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total")
+
   // TODO - allow status callbacks so CLI can have information and print it there
-  def process(source: Filesystem, target: Host, destination: Filesystem): Unit = {
+  def process(source: Filesystem, target: Host, destination: Filesystem, progressNotifier: (Int) => Unit): Unit = {
 
     (source, destination) match {
       case (s: PipedTransferSupported, d: PipedTransferSupported) if s.pipedTransferType == d.pipedTransferType => {
@@ -69,9 +72,9 @@ object Backup {
 
           Files.write(path, allExcludes.mkString("\n").getBytes)
 
-          var total: Long = Try {
+          var totalFiles: Long = Try {
             // try to read file total from previous file total
-            new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"))).toLong
+            new String(Files.readAllBytes(totalPath)).toLong
           }.getOrElse({
             // find number of inodes on system to estimate total number of files
             val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
@@ -84,51 +87,7 @@ object Backup {
           })
 
           var completed: Long = 0
-          var latestPercent: Long = 0
-          var latestTime = System.currentTimeMillis()
-          var startTime = System.currentTimeMillis()
-
-          val lastTotalMillis = Try {
-            Some(new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"))).toLong)
-          }.getOrElse(None)
-
-          println(s"last total millis: $lastTotalMillis")
-
-          def printCompletion(newTotal: Long): Unit = {
-            if (total != newTotal) {
-              println(s"new total: $newTotal")
-              total = newTotal
-            }
-
-            // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
-
-            val percent = if (total > 0) 100 * completed / total else 0
-            if (percent != latestPercent) {
-              // do some kind of estimated time smoothing based on amount of time to complete percentage so far
-
-              // smooth with time to complete previous backup as a factor
-              // adjust smoothing weights based on percent completed
-              // previous backup weight = 100 - percent
-              // current backup weight = percent
-              // current percent weight = 25 ( might be 0, as how much can only the last percent inform the entire remainder of the backup?)
-              val newLatestTime = System.currentTimeMillis()
-              val percentToComplete = 100 - percent
-              val incrementalMillisPerPercent = (newLatestTime - latestTime) / (percent - latestPercent)
-              val incrementalMillisToComplete = percentToComplete * incrementalMillisPerPercent
-              val totalMillisPerPercent = (newLatestTime - startTime) / percent
-
-              val totalMillisToComplete = (percentToComplete * totalMillisPerPercent, percent)
-              val previousMillisToComplete: (Long, Long) = lastTotalMillis.map(x => (percentToComplete * x / 100, 100 - percent)).getOrElse((0, 0))
-
-              println(s"previous millis to complete: $previousMillisToComplete; current millis to complete: $totalMillisToComplete; incremental millis to complete: $incrementalMillisToComplete")
-              val minutesToComplete = (totalMillisToComplete._1 * totalMillisToComplete._2 +
-                previousMillisToComplete._1 * previousMillisToComplete._2) / 60000 / (totalMillisToComplete._2 + previousMillisToComplete._2)
-
-              latestPercent = percent
-              latestTime = newLatestTime
-              println(s"Percent complete: ${percent}% ($minutesToComplete minutes estimated remaining)")
-            }
-          }
+          var latestPercent: Int = 0
 
           val incrementalPattern = """.*(ir-chk)=.*""".r
           val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
@@ -136,8 +95,8 @@ object Backup {
           val hidingfile = """.*(hiding file).*""".r
           val rsyncMessage = """rsync:\s(.*)""".r
 
-          println(s"total files to transfer: $total")
-          printCompletion(total)
+          println(s"total files to transfer: $totalFiles")
+          progressNotifier(0)
           // -M--fake-super to write user / group information into xattrs
           // --inplace to not re-write destination file (preserves bits for destination COW)
 
@@ -147,12 +106,29 @@ object Backup {
 
           val fw = new FileWriter("/tmp/backup_output")
 
+          def computePercent(newCompleted: Long, newTotalFiles: Long): Unit = {
+            completed = newCompleted
+            totalFiles = newTotalFiles
+
+            // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
+
+            val percent = if (totalFiles > 0) (100 * completed / totalFiles).toInt else 0
+
+            //println(s"$completed; $totalFiles; $percent")
+            if (percent != latestPercent) {
+              latestPercent = percent
+              progressNotifier(latestPercent)
+            }
+          }
+
           val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
           try {
+            // TODO - the rsync process can hang. this should be executed in some other thread and we should watch for log lines.
+            // if there hasn't been some log line in, 5 minutes, kill the rsync process and start again.
             Process(command).lineStream(ProcessLogger(line => rsyncMessages += line)).foreach(line => {
               line match {
-                case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { completed += 1; printCompletion(total) }
-                case totalPattern(toGo, newTotal) => { completed = newTotal.toLong - toGo.toLong; printCompletion(newTotal.toLong) }
+                case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { computePercent(completed + 1, totalFiles) }
+                case totalPattern(toGo, newTotal) => { computePercent(newTotal.toLong - toGo.toLong, newTotal.toLong) }
                 case rsyncMessage(message) => { rsyncMessages += message }
                 case others => { fw.write(others); fw.write("\n") }
               }
@@ -165,16 +141,11 @@ object Backup {
 
           fw.close()
 
-          val endTime = System.currentTimeMillis()
+          Files.write(totalPath, completed.toString.getBytes)
 
-          Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total"), completed.toString.getBytes)
-          Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"), (endTime - startTime).toString.getBytes)
-
-          println(s"total transferred: $completed; total rsync said would be transferred: $total")
+          println(s"total transferred: $completed; total rsync said would be transferred: totalFiles")
           // snapshot
-          val time = Instant.now().toString
-
-          val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@$time"
+          val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@${Instant.now().toString}"
           println(command2)
           val output2 = command2 !!
 

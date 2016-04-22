@@ -18,6 +18,10 @@ Will need to bundle with Scala libraries for Trusty / Vivid, and require that Sc
 
 To ignore scala classes while assembling fat jar, do: `packExcludeJars := Seq("scala-.*\\.jar"),`
 
+https://wiki.debian.org/Java/Packaging
+
+Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBuilder
+
 ### Publishing
 
 * To create a new release candidate branch and release:

@@ -23,18 +23,32 @@ import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.FileSystems
+import java.time.Instant
 
 import scala.util.Try
 
 class Snappy(configFile: String = "/etc/snappy.conf") {
 
-  val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "snappy", "scheduled")
+  println(s"Starting up at ${Instant.now()}")
 
-  // TODO - use user snappy, which must have root privs to get all data
-  // val schedule = s"0 * * * * traack /usr/bin/snappy backup"
+  val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "snappy", "scheduled")
+  val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "lastStartTime")
+  var lastPercentChange = System.currentTimeMillis()
+  val startTime = System.currentTimeMillis()
+
+  val lastStartMillis = Try {
+    new String(Files.readAllBytes(lastStartTimePath)).toLong
+  }.getOrElse(0.longValue())
+
+  val lastTotalMillis = Try {
+    Some(new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"))).toLong)
+  }.getOrElse(None)
+
+  // TODO - use user snappy for cron scheduling, which must have root privs to get all data
+  // "3-59/15 * * * * snappy /usr/bin/snappy backup"
 
   // TODO - install /var/cache/snappy and /var/lib/snappy directories, owned by snappy user
-  
+
   // TODO - on install, touch file /var/log/snappy.log and make owned by snappy
   // TODO - rotate with /etc/logrotate.d/package
   /*
@@ -54,7 +68,8 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
   }
 
   def scheduledBackup(): Unit = {
-    if (Files.exists(scheduleFile)) {
+    // TODO - don't back up if last backup duration / (now - last backup time start) > 10%
+    if (shouldBackup()) {
       backup()
     }
   }
@@ -62,7 +77,11 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
   def backup(): Unit = {
     // check for presence of cron task
     Option(new FileOutputStream("/var/lock/snappy").getChannel().tryLock()).map { x =>
-      Backup.process(sourceFilesystem, targetHost, targetFilesystem)
+      Backup.process(sourceFilesystem, targetHost, targetFilesystem, printCompletion)
+
+      val endTime = System.currentTimeMillis()
+      Files.write(lastStartTimePath, startTime.toString.getBytes)
+      Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"), (endTime - startTime).toString.getBytes)
     }.getOrElse(println("Could not get lock"))
   }
 
@@ -76,5 +95,41 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
 
   def snapshots(): Seq[Snapshot] = {
     Backup.snapshots()
+  }
+
+  private def shouldBackup(): Boolean = {
+    val scheduled = Files.exists(scheduleFile)
+    val overdue = overdueForBackup()
+    println(s"scheduled: $scheduled; overdue: $overdue")
+    scheduled && overdue
+  }
+
+  private def overdueForBackup(): Boolean = {
+    // we are overdue for backup if the last backup duration fraction of the time elapsed since last start is less than 10%
+    lastTotalMillis.getOrElse(0.toLong).toFloat / (System.currentTimeMillis() - lastStartMillis).toFloat < 0.1
+  }
+
+  private def printCompletion(percentCompleted: Int): Unit = {
+
+    // do some kind of estimated time smoothing based on amount of time to complete percentage so far
+
+    // smooth with time to complete previous backup as a factor
+    // adjust smoothing weights based on percent completed
+    // previous backup weight = 100 - percent
+    // current backup weight = percent
+    // current percent weight = 25 ( might be 0, as how much can only the last percent inform the entire remainder of the backup?)
+    val newLatestTime = System.currentTimeMillis()
+    val percentToComplete = 100 - percentCompleted
+    val totalMillisPerPercent = if (percentCompleted > 0) (newLatestTime - startTime) / percentCompleted else 0
+
+    val totalMillisToComplete = (percentToComplete * totalMillisPerPercent, percentCompleted)
+    val previousMillisToComplete: (Long, Int) = lastTotalMillis.map(x => (percentToComplete * x / 100, 100 - percentCompleted)).getOrElse((0, 0))
+
+    println(s"previous millis to complete: $previousMillisToComplete; current millis to complete: $totalMillisToComplete")
+    val minutesToComplete = (totalMillisToComplete._1 * totalMillisToComplete._2 +
+      previousMillisToComplete._1 * previousMillisToComplete._2) / 60000 / (totalMillisToComplete._2 + previousMillisToComplete._2)
+
+    lastPercentChange = newLatestTime
+    println(s"Percent complete: ${percentCompleted}% ($minutesToComplete minutes estimated remaining)")
   }
 }
