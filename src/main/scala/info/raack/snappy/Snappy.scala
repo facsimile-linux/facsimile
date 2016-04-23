@@ -25,6 +25,8 @@ import java.nio.file.Path
 import java.nio.file.FileSystems
 import java.time.Instant
 
+import scala.util.Failure
+import scala.util.Success
 import scala.util.Try
 
 class Snappy(configFile: String = "/etc/snappy.conf") {
@@ -67,22 +69,31 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
     (StandardFilesystem(), Host("localhost"), ZFSFilesystem("traackbackup", Some("/home/traack/testbackup"), false))
   }
 
-  def scheduledBackup(): Unit = {
-    // TODO - don't back up if last backup duration / (now - last backup time start) > 10%
+  def scheduledBackup(): Try[String] = {
     if (shouldBackup()) {
       backup()
+    } else {
+      Success("Backup not required at this time.")
     }
   }
 
-  def backup(): Unit = {
+  def backup(): Try[String] = {
     // check for presence of cron task
-    Option(new FileOutputStream("/var/lock/snappy").getChannel().tryLock()).map { x =>
-      Backup.process(sourceFilesystem, targetHost, targetFilesystem, printCompletion)
-
-      val endTime = System.currentTimeMillis()
-      Files.write(lastStartTimePath, startTime.toString.getBytes)
-      Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"), (endTime - startTime).toString.getBytes)
-    }.getOrElse(println("Could not get lock"))
+    Option(new FileOutputStream("/var/lock/snappy").getChannel().tryLock()).map { lock =>
+      try {
+        Backup.process(sourceFilesystem, targetHost, targetFilesystem, printCompletion) match {
+          case Success(message) => {
+            val endTime = System.currentTimeMillis()
+            Files.write(lastStartTimePath, startTime.toString.getBytes)
+            Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"), (endTime - startTime).toString.getBytes)
+            Success(message)
+          }
+          case other => other
+        }
+      } finally {
+        lock.release()
+      }
+    }.getOrElse(Failure(new RuntimeException("Could not get lock")))
   }
 
   def schedule(turnOn: Boolean): Unit = {
@@ -98,6 +109,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
   }
 
   private def shouldBackup(): Boolean = {
+    // don't back up if last backup duration / (now - last backup time start) > 10%
     val scheduled = Files.exists(scheduleFile)
     val overdue = overdueForBackup()
     println(s"scheduled: $scheduled; overdue: $overdue")

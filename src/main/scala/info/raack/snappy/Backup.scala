@@ -28,6 +28,8 @@ import java.time.Instant
 import scala.sys.process.stringToProcess
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
+import scala.util.Failure
+import scala.util.Success
 import scala.util.Try
 
 object Backup {
@@ -35,135 +37,149 @@ object Backup {
   val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total")
 
   // TODO - allow status callbacks so CLI can have information and print it there
-  def process(source: Filesystem, target: Host, destination: Filesystem, progressNotifier: (Int) => Unit): Unit = {
+  def process(source: Filesystem, target: Host, destination: Filesystem, progressNotifier: (Int) => Unit): Try[String] = {
 
     (source, destination) match {
       case (s: PipedTransferSupported, d: PipedTransferSupported) if s.pipedTransferType == d.pipedTransferType => {
         // source and destination support piped transfer and they use the same mechanism
-
+        Failure(new IllegalArgumentException("Piped transfer not yet supported"))
       }
       case _ => {
-        try {
-          // mount zfs
-          //"sudo zpool import -d /home/traack/testbackup traackbackup" !!
+        // mount zfs
+        //"sudo zpool import -d /home/traack/testbackup traackbackup" !!
 
-          // TODO - try fakesuper send and restore of single test file to ensure that xattrs can be stored
-          // if not, ask if they can login as root
-          // if not, warn user that backup and restore will take longer than necessary until they can enable xattrs for
-          // the destination filesystem OR they can login as root
+        // TODO - try fakesuper send and restore of single test file to ensure that xattrs can be stored
+        // if not, ask if they can login as root
+        // if not, warn user that backup and restore will take longer than necessary until they can enable xattrs for
+        // the destination filesystem OR they can login as root
 
-          var mountDir = "traack@transmission:/mnt/tank/backup/lune-rsnapshot/backup/localhost"
-          //val one = s"mkdir -p $mountDir" !!
-          //val two = s"sudo sshfs root@backup:/mnt/tank/backup/lune-rsnapshot/backup/localhost/ $mountDir" !!
+        var mountDir = "traack@transmission:/mnt/tank/backup/lune-rsnapshot/backup/localhost"
+        //val one = s"mkdir -p $mountDir" !!
+        //val two = s"sudo sshfs root@backup:/mnt/tank/backup/lune-rsnapshot/backup/localhost/ $mountDir" !!
 
-          // backup
+        // backup
 
-          val defaultExcludes = Seq(".gvfs", ".cache/*", ".thumbnails*", "[Tt]rash*",
-            "*.backup*", "*~", ".dropbox*", "/proc", "/sys",
-            "/dev", "/run", "/etc/mtab", "/media", "/net",
-            "/var/cache/apt/archives/*.deb", "lost+found/*",
-            "/tmp", "/var/tmp", "/var/backups", ".Private", mountDir)
+        val defaultExcludes = Seq(".gvfs", ".cache/*", ".thumbnails*", "[Tt]rash*",
+          "*.backup*", "*~", ".dropbox*", "/proc", "/sys",
+          "/dev", "/run", "/etc/mtab", "/media", "/net",
+          "/var/cache/apt/archives/*.deb", "lost+found/*",
+          "/tmp", "/var/tmp", "/var/backups", ".Private", mountDir)
 
-          val customExcludes = Seq("/backup", "/backupmount", "/sshfs", "/var/lib/mlocate/*", ".recoll/xapiandb", ".gconf.old/system/networking/connections", ".local/share/zeitgeist.old")
+        val customExcludes = Seq("/backup", "/backupmount", "/sshfs", "/var/lib/mlocate/*", ".recoll/xapiandb", ".gconf.old/system/networking/connections", ".local/share/zeitgeist.old")
 
-          val allExcludes = (defaultExcludes ++ customExcludes)
+        val allExcludes = (defaultExcludes ++ customExcludes)
 
-          val path = Files.createTempFile("snappy", "config")
+        val path = Files.createTempFile("snappy", "config")
 
-          Files.write(path, allExcludes.mkString("\n").getBytes)
+        Files.write(path, allExcludes.mkString("\n").getBytes)
 
-          var totalFiles: Long = Try {
-            // try to read file total from previous file total
-            new String(Files.readAllBytes(totalPath)).toLong
-          }.getOrElse({
-            // find number of inodes on system to estimate total number of files
-            val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
-            Process("/bin/df --output=target,fstype,iused").lineStream
-              .flatMap({ case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
-              .filterNot(item => allExcludes.contains(item._1))
-              .filterNot(item => Seq("ecryptfs").contains(item._2))
-              .map(_._3)
-              .sum
-          })
+        var totalFiles: Long = Try {
+          // try to read file total from previous file total
+          new String(Files.readAllBytes(totalPath)).toLong
+        }.getOrElse({
+          // find number of inodes on system to estimate total number of files
+          val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
+          Process("/bin/df --output=target,fstype,iused").lineStream
+            .flatMap({ case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
+            .filterNot(item => allExcludes.contains(item._1))
+            .filterNot(item => Seq("ecryptfs").contains(item._2))
+            .map(_._3)
+            .sum
+        })
 
-          var completed: Long = 0
-          var latestPercent: Int = 0
+        var completed: Long = 0
+        var latestPercent: Int = 0
 
-          val incrementalPattern = """.*(ir-chk)=.*""".r
-          val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
-          val uptodate = """.*(uptodate).*""".r
-          val hidingfile = """.*(hiding file).*""".r
-          val rsyncMessage = """rsync:\s(.*)""".r
+        val incrementalPattern = """.*(ir-chk)=.*""".r
+        val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
+        val uptodate = """.*(uptodate).*""".r
+        val hidingfile = """.*(hiding file).*""".r
+        val rsyncMessage = """rsync:\s(.*)""".r
 
-          println(s"total files to transfer: $totalFiles")
-          progressNotifier(0)
-          // -M--fake-super to write user / group information into xattrs
-          // --inplace to not re-write destination file (preserves bits for destination COW)
+        println(s"total files to transfer: $totalFiles")
+        progressNotifier(0)
+        // -M--fake-super to write user / group information into xattrs
+        // --inplace to not re-write destination file (preserves bits for destination COW)
 
-          val command = s"sudo /usr/bin/nice -n 19 /usr/bin/rsync -aHAvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
+        val command = s"sudo /usr/bin/nice -n 19 /usr/bin/rsync -aHAvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
 
-          println(command)
+        println(command)
 
-          val fw = new FileWriter("/tmp/backup_output")
+        val fw = new FileWriter("/tmp/backup_output")
 
-          def computePercent(newCompleted: Long, newTotalFiles: Long): Unit = {
-            completed = newCompleted
-            totalFiles = newTotalFiles
+        def computePercent(newCompleted: Long, newTotalFiles: Long): Unit = {
+          completed = newCompleted
+          totalFiles = newTotalFiles
 
-            // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
+          // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
 
-            val percent = if (totalFiles > 0) (100 * completed / totalFiles).toInt else 0
+          val percent = if (totalFiles > 0) (100 * completed / totalFiles).toInt else 0
 
-            //println(s"$completed; $totalFiles; $percent")
-            if (percent != latestPercent) {
-              latestPercent = percent
-              progressNotifier(latestPercent)
-            }
+          //println(s"$completed; $totalFiles; $percent")
+          if (percent != latestPercent) {
+            latestPercent = percent
+            progressNotifier(latestPercent)
           }
-
-          val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
-          try {
-            // TODO - the rsync process can hang. this should be executed in some other thread and we should watch for log lines.
-            // if there hasn't been some log line in, 5 minutes, kill the rsync process and start again.
-            Process(command).lineStream(ProcessLogger(line => rsyncMessages += line)).foreach(line => {
-              line match {
-                case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { computePercent(completed + 1, totalFiles) }
-                case totalPattern(toGo, newTotal) => { computePercent(newTotal.toLong - toGo.toLong, newTotal.toLong) }
-                case rsyncMessage(message) => { rsyncMessages += message }
-                case others => { fw.write(others); fw.write("\n") }
-              }
-            })
-          } catch {
-            case e: Exception => {
-              println(s"Messages from rsync: \n${rsyncMessages.mkString("\n")}")
-            }
-          }
-
-          fw.close()
-
-          Files.write(totalPath, completed.toString.getBytes)
-
-          println(s"total transferred: $completed; total rsync said would be transferred: totalFiles")
-          // snapshot
-          val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@${Instant.now().toString}"
-          println(command2)
-          val output2 = command2 !!
-
-          val command3 = "ssh storage zfs list -t snapshot"
-
-          // TODO - remove old snapshots
-
-          println(command3)
-          command3 !!
-
-        } catch {
-          case e: Exception => {
-            e.printStackTrace()
-          }
-        } finally {
-          // unmount
-          //"sudo fusermount -u /tmp/newbackup" !!
         }
+
+        val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
+
+        val backupMessage = Try {
+          // TODO - the rsync process can hang. this should be executed in some other thread and we should watch for log lines.
+          // if there hasn't been some log line in, 5 minutes, kill the rsync process and start again.
+          Process(command).lineStream(ProcessLogger(line => rsyncMessages += line)).foreach(line => {
+            line match {
+              case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { computePercent(completed + 1, totalFiles) }
+              case totalPattern(toGo, newTotal) => { computePercent(newTotal.toLong - toGo.toLong, newTotal.toLong) }
+              case rsyncMessage(message) => { rsyncMessages += message }
+              case others => { fw.write(others); fw.write("\n") }
+            }
+          })
+        } match {
+          case Failure(e) => {
+            val errorRegex = """Nonzero exit code: (\d+)""".r
+            e.getMessage match {
+              case errorRegex(code) => {
+                code.toInt match {
+                  // could not delete all files because of max delete OR
+                  // some files not transfered because they disappeared first - not a problem
+                  case 24 | 25 => Success("")
+                  case 23 => Success(s"Some files not transfered due to an error\n${rsyncMessages.mkString("\n")}")
+                  case other => Failure(new RuntimeException(s"Backup error\n${rsyncMessages.mkString("\n")}")) // non fatal
+                }
+              }
+              case other => Failure(new RuntimeException(s"Backup error:\n${rsyncMessages.mkString("\n")}"))
+            }
+          }
+          case other => Success("")
+        }
+
+        backupMessage match {
+          case Success(message) => {
+            fw.close()
+
+            Files.write(totalPath, completed.toString.getBytes)
+
+            println(s"total transferred: $completed; total rsync said would be transferred: totalFiles")
+            // snapshot
+            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@${Instant.now().toString}"
+            println(command2)
+            val output2 = command2 !!
+
+            val command3 = "ssh storage zfs list -t snapshot"
+
+            // TODO - remove old snapshots
+
+            println(command3)
+            command3 !!
+
+            Success(message)
+          }
+          case e => e
+        }
+
+        // unmount
+        //"sudo fusermount -u /tmp/newbackup" !!
       }
     }
   }

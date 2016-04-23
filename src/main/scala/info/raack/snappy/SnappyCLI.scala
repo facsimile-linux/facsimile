@@ -20,23 +20,36 @@
 package info.raack.snappy
 
 import scala.io.Source
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 object SnappyCLI extends App {
 
-  sys.exit(args.headOption.map(process(_).getOrElse(0)).getOrElse({
+  args.headOption.map(process(_).getOrElse(0)).getOrElse({
     // wait for commands
     Source.stdin.getLines.map(process(_)).collectFirst({ case Some(x) => x }).getOrElse(0)
-  }))
+  }) match {
+    case 0 => ()
+    case other => sys.exit(other)
+  }
 
   private def process(command: String): Option[Int] = {
     command match {
-      case "scheduled-backup" => { new Snappy().scheduledBackup(); None }
+      case "scheduled-backup" => handleBackupOutput(new Snappy().scheduledBackup())
       case "schedule-on" => { new Snappy().schedule(true); None }
       case "schedule-off" => { new Snappy().schedule(false); None }
-      case "backup" => { new Snappy().backup(); None }
+      case "backup" => handleBackupOutput(new Snappy().backup())
       case "help" => { println(help); None }
       case "exit" => { Some(0) }
       case other => { println(s"$other is not a valid command.\n${help}"); None }
+    }
+  }
+
+  private def handleBackupOutput(output: Try[String]): Option[Int] = {
+    output match {
+      case Success(message) => { println(s"Succeeded with message: $message"); None }
+      case Failure(e) => { println(s"Could not backup: ${e.getMessage}"); None }
     }
   }
 
