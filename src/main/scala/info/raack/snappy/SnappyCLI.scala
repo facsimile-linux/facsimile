@@ -28,7 +28,8 @@ object SnappyCLI extends App {
 
   args.headOption.map(process(_).getOrElse(0)).getOrElse({
     // wait for commands
-    Source.stdin.getLines.map(process(_)).collectFirst({ case Some(x) => x }).getOrElse(0)
+    print("Welcome to Snappy!\n> ")
+    Source.stdin.getLines.map(x => { val o = process(x); if (o == None) { print("> ") }; o }).collectFirst({ case Some(x) => x }).getOrElse(0)
   }) match {
     case 0 => ()
     case other => sys.exit(other)
@@ -41,7 +42,7 @@ object SnappyCLI extends App {
       case "schedule-off" => { new Snappy().schedule(false); None }
       case "backup" => handleBackupOutput(new Snappy().backup())
       case "help" => { println(help); None }
-      case "exit" => { Some(0) }
+      case "exit" => Some(0)
       case other => { println(s"$other is not a valid command.\n${help}"); None }
     }
   }
@@ -60,7 +61,11 @@ Run Snappy command specified as COMMAND, or enter the Snappy shell if COMMAND is
 
 Possible values for COMMAND
   backup                     complete a backup using the current settings
+  schedule-on                turn on scheduled backups
+  schedule-off               turn off scheduled backups
+  scheduled-backup           if a backup is required (schedule is on and enough time has past so backups are less than 10% of wall time)
   help                       print this help
+  exit                       exit Snappy
 """
   }
 }
