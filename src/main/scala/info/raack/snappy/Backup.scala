@@ -36,6 +36,38 @@ object Backup {
 
   val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total")
 
+  /*
+   * Possible backup commands:
+   * 
+   * Local side must run as root, so that all files can be read for backup
+   * Remote side must allow snapshots to be taken, test for this
+   * 
+   * rsync notes
+   * whole-file is used for both local paths, because bandwidth between source and destination is greater than bandwidth to storage
+   * i believe (verify through experiment) that no-whole-file be used for sshfs systems, because even though the destination looks like it is local, it is actually remote
+   * 
+   * local:
+   * local non-snapshotting -> local: sudo rsync --link-dest some-dir / /backup/
+   * local snapshotting -> local: zfs send | zfs receive
+   * 
+   * remote:
+   * remote snapshots available:
+   * local non-snapshotting (or local snapshotting != remote snapshotting) -> remote root: sudo rsync / root@server:/backup/, snapshot remote system
+   * local non-snapshotting (or local snapshotting != remote snapshotting) -> remote no-root: sudo rsync --fake-super user@server:/backup/; snapshot remote system
+   * local snapshotting (snapshot filesystems compatible) -> remote root: local snapshot; zfs send | ssh root@server zfs receive
+   * local snapshotting (snapshot filesystems compatible)> remote no-root: local snapshot; zfs send | ssh root@server zfs receive
+   * 
+   * remote snapshots not available:
+   * local -> remote root: sudo rsync --link-dest some-path / root@server:/backup/
+   * local -> remote no-root: sudo rsync --fake-super --link-dest some-path / user@server:/backup/
+   * 
+   * may need to lookup all permissions if remote host does not support xattrs (can find this by backing up a single file and testing for correct restoration), then will need to collect all ownership / permissions / ACLs / xattrs and store them, then put them back 
+   * 
+   * what if the local machine has multiple mountpoints for backups? that complicates remote backups because then we have to have multiple zfs volumes
+   * but - maybe this is ok, because we can tell the user "we need create, snapshot, delete, etc permissions for your user on your destination host. run these commands: xyz"
+   * 
+   */
+
   // TODO - allow status callbacks so CLI can have information and print it there
   def process(source: Filesystem, target: Host, destination: Filesystem, progressNotifier: (Int) => Unit): Try[String] = {
 
@@ -101,10 +133,11 @@ object Backup {
         // -M--fake-super to write user / group information into xattrs
         // --inplace to not re-write destination file (preserves bits for destination COW)
 
-        val command = s"sudo /usr/bin/nice -n 19 /usr/bin/rsync -aHAvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
+        val command = s"sudo /usr/bin/nice -n 19 /usr/bin/rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $mountDir/"
 
         println(command)
 
+        // TODO - do something else with this output
         val fw = new FileWriter("/tmp/backup_output")
 
         def computePercent(newCompleted: Long, newTotalFiles: Long): Unit = {
@@ -115,7 +148,6 @@ object Backup {
 
           val percent = if (totalFiles > 0) (100 * completed / totalFiles).toInt else 0
 
-          //println(s"$completed; $totalFiles; $percent")
           if (percent != latestPercent) {
             latestPercent = percent
             progressNotifier(latestPercent)
@@ -160,20 +192,14 @@ object Backup {
 
             Files.write(totalPath, completed.toString.getBytes)
 
-            println(s"total transferred: $completed; total rsync said would be transferred: totalFiles")
+            println(s"total transferred: $completed; total rsync said would be transferred: $totalFiles")
             // snapshot
-            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@${Instant.now().toString}"
+            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@snappy-${Instant.now().toString}"
             println(command2)
             val output2 = command2 !!
 
-            val command3 = "ssh storage zfs list -t snapshot"
-
-            // TODO - remove old snapshots
-
-            println(command3)
-            command3 !!
-
-            Success(message)
+            //cullSnapshots()
+            Try { "" }
           }
           case e => e
         }
@@ -186,5 +212,17 @@ object Backup {
 
   def snapshots(): Seq[Snapshot] = {
     Seq()
+  }
+
+  private def cullSnapshots(): Try[String] = {
+    Try {
+      val output: String = "ssh storage zfs list -t snapshot" !!
+
+      output.split("\n").map(line => {
+        Instant.parse(line)
+      }).sorted.reverse
+
+      ""
+    }
   }
 }

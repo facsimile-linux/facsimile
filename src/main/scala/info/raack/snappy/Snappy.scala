@@ -35,15 +35,16 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
 
   val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "snappy", "scheduled")
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "lastStartTime")
+  val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime")
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
 
   val lastStartMillis = Try {
-    new String(Files.readAllBytes(lastStartTimePath)).toLong
-  }.getOrElse(0.longValue())
+    Some(new String(Files.readAllBytes(lastStartTimePath)).toLong)
+  }.getOrElse(None)
 
   val lastTotalMillis = Try {
-    Some(new String(Files.readAllBytes(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"))).toLong)
+    Some(new String(Files.readAllBytes(totalTimePath)).trim.toLong)
   }.getOrElse(None)
 
   // TODO - use user snappy for cron scheduling, which must have root privs to get all data
@@ -85,7 +86,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
           case Success(message) => {
             val endTime = System.currentTimeMillis()
             Files.write(lastStartTimePath, startTime.toString.getBytes)
-            Files.write(FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime"), (endTime - startTime).toString.getBytes)
+            Files.write(totalTimePath, (endTime - startTime).toString.getBytes)
             Success(message)
           }
           case other => other
@@ -118,7 +119,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
 
   private def overdueForBackup(): Boolean = {
     // we are overdue for backup if the last backup duration fraction of the time elapsed since last start is less than 10%
-    lastTotalMillis.getOrElse(0.toLong).toFloat / (System.currentTimeMillis() - lastStartMillis).toFloat < 0.1
+    lastTotalMillis.getOrElse(0.toLong).toFloat / (System.currentTimeMillis() - lastStartMillis.getOrElse(0.toLong)).toFloat < 0.1
   }
 
   private def printCompletion(percentCompleted: Int): Unit = {
@@ -135,7 +136,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
     val totalMillisPerPercent = if (percentCompleted > 0) (newLatestTime - startTime) / percentCompleted else 0
 
     val totalMillisToComplete = (percentToComplete * totalMillisPerPercent, percentCompleted)
-    val previousMillisToComplete: (Long, Int) = lastTotalMillis.map(x => (percentToComplete * x / 100, 100 - percentCompleted)).getOrElse((0, 0))
+    val previousMillisToComplete = lastTotalMillis.map(x => (percentToComplete * x / 100, 100 - percentCompleted)).getOrElse((0.toLong, 1))
 
     println(s"previous millis to complete: $previousMillisToComplete; current millis to complete: $totalMillisToComplete")
     val minutesToComplete = (totalMillisToComplete._1 * totalMillisToComplete._2 +
