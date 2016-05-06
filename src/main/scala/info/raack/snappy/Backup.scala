@@ -26,6 +26,9 @@ import java.nio.file.FileSystems
 import java.time.Instant
 import java.time.Month
 import java.time.ZoneId
+import java.time.LocalDateTime
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
 import java.time.temporal.ChronoUnit
@@ -216,6 +219,15 @@ object Backup {
     }
   }
 
+  private def formatHour(time: Instant): String = {
+    val hourFormatter = DateTimeFormatter.ofPattern("h:mm a")
+      .withLocale(Locale.ENGLISH)
+      .withZone(ZoneId.systemDefault())
+
+    val ty = if (LocalDateTime.ofInstant(time, ZoneId.systemDefault()).isAfter(LocalDateTime.of(LocalDate.now(), LocalTime.MIDNIGHT))) "Today, " else "Yesterday, "
+    ty + hourFormatter.format(time)
+  }
+
   def snapshots(): Seq[String] = {
     val current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
@@ -229,14 +241,10 @@ object Backup {
       .withLocale(Locale.ENGLISH)
       .withZone(ZoneId.systemDefault())
 
-    val hourFormatter = DateTimeFormatter.ofPattern("h:mm a")
-      .withLocale(Locale.ENGLISH)
-      .withZone(ZoneId.systemDefault())
-
     snapshotTimes()
       .sortWith(_.toString < _.toString)
       .map(x => {
-        if (x.isBefore(oneMonthBack)) { monthFormatter.format(x) } else if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { hourFormatter.format(x) }
+        if (x.isBefore(oneMonthBack)) { monthFormatter.format(x) } else if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }
       })
   }
 
