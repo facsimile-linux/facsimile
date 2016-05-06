@@ -48,7 +48,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
   }.getOrElse(None)
 
   // TODO - use user snappy for cron scheduling, which must have root privs to get all data
-  // "3-59/15 * * * * snappy /usr/bin/snappy scheduled-backup >> /var/log/snappy.log 2>&1"
+  // "3 * * * * snappy /usr/bin/snappy scheduled-backup >> /var/log/snappy.log 2>&1"
 
   // TODO - install /var/cache/snappy and /var/lib/snappy directories, owned by snappy user
 
@@ -105,7 +105,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
     }
   }
 
-  def snapshots(): Seq[Snapshot] = {
+  def snapshots(): Seq[String] = {
     Backup.snapshots()
   }
 

@@ -41,6 +41,7 @@ object SnappyCLI extends App {
       case "schedule-on" => { new Snappy().schedule(true); None }
       case "schedule-off" => { new Snappy().schedule(false); None }
       case "backup" => handleBackupOutput(new Snappy().backup())
+      case "list-snapshots" => { println(new Snappy().snapshots()); None }
       case "help" => { println(help); None }
       case "exit" => Some(0)
       case other => { println(s"$other is not a valid command.\n${help}"); None }

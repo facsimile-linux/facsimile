@@ -24,6 +24,12 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.FileSystems
 import java.time.Instant
+import java.time.Month
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoField
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 import scala.sys.process.stringToProcess
 import scala.sys.process.Process
@@ -194,12 +200,12 @@ object Backup {
 
             println(s"total transferred: $completed; total rsync said would be transferred: $totalFiles")
             // snapshot
-            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@snappy-${Instant.now().toString}"
+            val snapshotInstant = Instant.now()
+            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@snappy-${snapshotInstant.toString}"
             println(command2)
             val output2 = command2 !!
 
-            //cullSnapshots()
-            Try { "" }
+            cullSnapshots(snapshotInstant)
           }
           case e => e
         }
@@ -210,17 +216,96 @@ object Backup {
     }
   }
 
-  def snapshots(): Seq[Snapshot] = {
-    Seq()
+  def snapshots(): Seq[String] = {
+    val current = Instant.now()
+    val oneDayBack = current.minus(1, ChronoUnit.DAYS)
+    val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
+
+    val monthFormatter = DateTimeFormatter.ofPattern("MMMM YYYY")
+      .withLocale(Locale.ENGLISH)
+      .withZone(ZoneId.systemDefault())
+
+    val dayFormatter = DateTimeFormatter.ofPattern("MMMM d, YYYY")
+      .withLocale(Locale.ENGLISH)
+      .withZone(ZoneId.systemDefault())
+
+    val hourFormatter = DateTimeFormatter.ofPattern("h:mm a")
+      .withLocale(Locale.ENGLISH)
+      .withZone(ZoneId.systemDefault())
+
+    snapshotTimes()
+      .sortWith(_.toString < _.toString)
+      .map(x => {
+        if (x.isBefore(oneMonthBack)) { monthFormatter.format(x) } else if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { hourFormatter.format(x) }
+      })
   }
 
-  private def cullSnapshots(): Try[String] = {
-    Try {
-      val output: String = "ssh storage zfs list -t snapshot" !!
+  private def snapshotTimes(): Seq[Instant] = {
+    val dataset = "tank/backup/lune-rsnapshot"
+    val length = (dataset + "@snappy-").length
+    val output: String = s"ssh storage zfs list -t snapshot -r $dataset" !!
 
-      output.split("\n").map(line => {
-        Instant.parse(line)
-      }).sorted.reverse
+    var current = Instant.now()
+    val oneDayBack = current.minus(1, ChronoUnit.DAYS)
+    val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
+
+    output.split("\n")
+      .flatMap { str => Try { Instant.parse(str.substring(length, length + 24)) }.toOption }
+  }
+
+  private def cullSnapshots(currentSnapshot: Instant): Try[String] = {
+    Try {
+      // keep all hourly snapshots for last 24 hours
+      // keep all daily backups for the last month
+      // keep all weekly backups forever
+
+      // go through snapshots in reverse order.
+      // loop:
+      //   if visited snapshot > waiting for date, delete
+      //   else { 
+      //     if now - visited snapshot < 24 hours while (waiting for > visited snapshot) waiting for = waiting for - 1 hour
+      //     else if now - visited snapshot < 30 days while (waiting for > visited snapshot) waiting for = waiting for - 1 day
+      //     else while (waiting for > visited snapshot) waiting for = waiting for - 1 week
+
+      var waitingFor = currentSnapshot
+      val oneDayBack = currentSnapshot.minus(1, ChronoUnit.DAYS)
+      val oneMonthBack = currentSnapshot.minus(30, ChronoUnit.DAYS)
+
+      // ignore first snapshot
+      waitingFor = waitingFor.minus(1, ChronoUnit.HOURS)
+
+      snapshotTimes()
+        .sortWith(_.toString > _.toString)
+        .tail // ignore first snapshot
+        .foreach(snapshotDate => {
+          println(s"evaling $snapshotDate; waiting for $waitingFor")
+          if (snapshotDate.isAfter(waitingFor)) {
+            // TODO - must ensure zfs allow traack mount,destroy tank/backup/lune-rsnapshot
+            val command = s"ssh storage zfs destroy tank/backup/lune-rsnapshot@snappy-$snapshotDate"
+            println(s"deleting snapshot $snapshotDate with $command")
+            command !!
+          } else {
+            if (oneDayBack.isBefore(snapshotDate)) {
+              println("snapshot is not older than one day")
+              while (waitingFor.isAfter(snapshotDate)) {
+                waitingFor = waitingFor.minus(1, ChronoUnit.HOURS)
+                println(s"waiting for moved 1 hour to $waitingFor")
+              }
+            } else if (oneMonthBack.isBefore(snapshotDate)) {
+              println("snapshot is older than one day but not older than one month")
+              while (waitingFor.isAfter(snapshotDate)) {
+                waitingFor = waitingFor.minus(1, ChronoUnit.DAYS)
+                println(s"waiting for moved 1 day to $waitingFor")
+              }
+            } else {
+              println("snapshot is older than one month")
+              while (waitingFor.isAfter(snapshotDate)) {
+                waitingFor = waitingFor.minus(7, ChronoUnit.DAYS)
+                println(s"waiting for moved 1 week to $waitingFor")
+              }
+            }
+          }
+        })
 
       ""
     }
