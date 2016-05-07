@@ -26,6 +26,8 @@ import scala.util.Try
 
 object SnappyCLI extends App {
 
+  // TODO - make sure that snappy-toolbar.desktop is installed in /etc/xdg/autostart
+
   args.headOption.map(process(_).getOrElse(0)).getOrElse({
     // wait for commands
     print("Welcome to Snappy!\n> ")
