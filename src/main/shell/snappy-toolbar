@@ -1,0 +1,38 @@
+#! /usr/bin/python
+# -*- coding: utf-8; -*-
+"""
+(C) Copyright 2016 Taylor Raack.
+
+Snappy is free software: you can redistribute it and/or modify
+it under the terms of the Affero GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Snappy is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+Affero GNU General Public License for more details.
+
+You should have received a copy of the Affero GNU General Public License
+along with Snappy.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+import appindicator
+import gobject
+import gtk
+
+if __name__ == "__main__":
+  indicator = appindicator.Indicator("snappy-toolbar","indicator-messages", appindicator.CATEGORY_APPLICATION_STATUS)
+  indicator.set_status(appindicator.STATUS_ACTIVE)
+  indicator.set_attention_icon("indicator-messages-new")
+
+  menu = gtk.Menu()
+
+  menu_item = gtk.MenuItem("Show backup")
+  menu.append(menu_item)
+  # menu_items.connect("activate", menuitem_response, buf)
+  menu_item.show()
+
+  indicator.set_menu(menu)
+
+  gtk.main()

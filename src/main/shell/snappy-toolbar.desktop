@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Snappy Toolbar
+Comment=Show the Snappy Toolbar to view backups
+Exec=/usr/bin/snappy-toolbar
+Type=Application
+Categories=GNOME;GTK;Utility;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
