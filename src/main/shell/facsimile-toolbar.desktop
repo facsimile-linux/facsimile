@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=Snappy Toolbar
-Comment=Show the Snappy Toolbar to view backups
-Exec=/usr/bin/snappy-toolbar
+Name=Facsimile Toolbar
+Comment=Show the Facsimile Toolbar to view backups
+Exec=/usr/bin/facsimile-toolbar
 Type=Application
 Categories=GNOME;GTK;Utility;
 StartupNotify=false

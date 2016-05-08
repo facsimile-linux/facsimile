@@ -1,7 +1,7 @@
 // basic project settings
-name := "snappy"
+name := "facsimile"
 
-organization := "info.raack.snappy"
+organization := "info.raack.facsimile"
 
 version := "1.0.x-SNAPSHOT"
 

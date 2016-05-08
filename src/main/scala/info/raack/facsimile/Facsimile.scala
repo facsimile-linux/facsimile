@@ -1,23 +1,23 @@
 /**
- * This file is part of Snappy.
+ * This file is part of Facsimile.
  *
  * (C) Copyright 2016 Taylor Raack.
  *
- * Snappy is free software: you can redistribute it and/or modify
+ * Facsimile is free software: you can redistribute it and/or modify
  * it under the terms of the Affero GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Snappy is distributed in the hope that it will be useful,
+ * Facsimile is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * Affero GNU General Public License for more details.
  *
  * You should have received a copy of the Affero GNU General Public License
- * along with Snappy.  If not, see <http://www.gnu.org/licenses/>.
+ * along with Facsimile.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package info.raack.snappy
+package info.raack.facsimile
 
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -29,13 +29,13 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
-class Snappy(configFile: String = "/etc/snappy.conf") {
+class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   println(s"Starting up at ${Instant.now()}")
 
-  val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "snappy", "scheduled")
-  val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "lastStartTime")
-  val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "totaltime")
+  val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "scheduled")
+  val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
+  val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
 
@@ -47,22 +47,22 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
     Some(new String(Files.readAllBytes(totalTimePath)).trim.toLong)
   }.getOrElse(None)
 
-  // TODO - use user snappy for cron scheduling, which must have root privs to get all data
-  // "3 * * * * snappy /usr/bin/snappy scheduled-backup >> /var/log/snappy.log 2>&1"
+  // TODO - use user facsimile for cron scheduling, which must have root privs to get all data
+  // "3 * * * * facsimile /usr/bin/facsimile scheduled-backup >> /var/log/facsimile.log 2>&1"
 
-  // TODO - install /var/cache/snappy and /var/lib/snappy directories, owned by snappy user
+  // TODO - install /var/cache/facsimile and /var/lib/facsimile directories, owned by facsimile user
 
-  // TODO - on install, touch file /var/log/snappy.log and make owned by snappy
+  // TODO - on install, touch file /var/log/facsimile.log and make owned by facsimile
   // TODO - rotate with /etc/logrotate.d/package
   /*
-   * /var/log/snappy.log {
+   * /var/log/facsimile.log {
          weekly
          missingok
          rotate 12
          compress
          copytruncate
          notifempty
-         create 640 snappy adm
+         create 640 facsimile adm
      }
    */
 
@@ -80,7 +80,7 @@ class Snappy(configFile: String = "/etc/snappy.conf") {
 
   def backup(): Try[String] = {
     // check for presence of cron task
-    Option(new FileOutputStream("/var/lock/snappy").getChannel().tryLock()).map { lock =>
+    Option(new FileOutputStream("/var/lock/facsimile").getChannel().tryLock()).map { lock =>
       try {
         Backup.process(sourceFilesystem, targetHost, targetFilesystem, printCompletion) match {
           case Success(message) => {

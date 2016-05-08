@@ -1,23 +1,23 @@
 /**
- * This file is part of Snappy.
+ * This file is part of Facsimile.
  *
  * (C) Copyright 2016 Taylor Raack.
  *
- * Snappy is free software: you can redistribute it and/or modify
+ * Facsimile is free software: you can redistribute it and/or modify
  * it under the terms of the Affero GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * Snappy is distributed in the hope that it will be useful,
+ * Facsimile is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * Affero GNU General Public License for more details.
  *
  * You should have received a copy of the Affero GNU General Public License
- * along with Snappy.  If not, see <http://www.gnu.org/licenses/>.
+ * along with Facsimile.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package info.raack.snappy
+package info.raack.facsimile
 
 import java.io.FileWriter
 import java.nio.file.Files
@@ -43,7 +43,7 @@ import scala.util.Try
 
 object Backup {
 
-  val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "snappy", "total")
+  val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "total")
 
   /*
    * Possible backup commands:
@@ -110,7 +110,7 @@ object Backup {
 
         val allExcludes = (defaultExcludes ++ customExcludes)
 
-        val path = Files.createTempFile("snappy", "config")
+        val path = Files.createTempFile("facsimile", "config")
 
         Files.write(path, allExcludes.mkString("\n").getBytes)
 
@@ -204,7 +204,7 @@ object Backup {
             println(s"total transferred: $completed; total rsync said would be transferred: $totalFiles")
             // snapshot
             val snapshotInstant = Instant.now()
-            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@snappy-${snapshotInstant.toString}"
+            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@facsimile-${snapshotInstant.toString}"
             println(command2)
             val output2 = command2 !!
 
@@ -250,7 +250,7 @@ object Backup {
 
   private def snapshotTimes(): Seq[Instant] = {
     val dataset = "tank/backup/lune-rsnapshot"
-    val length = (dataset + "@snappy-").length
+    val length = (dataset + "@facsimile-").length
     val output: String = s"ssh storage zfs list -t snapshot -r $dataset" !!
 
     var current = Instant.now()
@@ -289,7 +289,7 @@ object Backup {
           println(s"evaling $snapshotDate; waiting for $waitingFor")
           if (snapshotDate.isAfter(waitingFor)) {
             // TODO - must ensure zfs allow traack mount,destroy tank/backup/lune-rsnapshot
-            val command = s"ssh storage zfs destroy tank/backup/lune-rsnapshot@snappy-$snapshotDate"
+            val command = s"ssh storage zfs destroy tank/backup/lune-rsnapshot@facsimile-$snapshotDate"
             println(s"deleting snapshot $snapshotDate with $command")
             command !!
           } else {

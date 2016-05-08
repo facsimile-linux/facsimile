@@ -1,5 +1,0 @@
-#!/bin/sh
-
-set -e
-
-/usr/bin/java -cp "/usr/share/snappy/lib/*" info.raack.snappy.SnappyCLI $@
