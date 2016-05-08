@@ -1,5 +1,5 @@
-# Snappy
-Automatically attaches system info to an existing GitHub issue.
+# Facsimile
+Snapshot backup system
 
 ## Development
 
