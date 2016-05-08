@@ -62,7 +62,7 @@ scalacOptions in Test ++= Seq("-Yrangepos")
 // need this so that tests which access the testing database don't happen at the same moment and interfere with each other
 parallelExecution in Test := false
 
-ScoverageSbtPlugin.ScoverageKeys.coverageMinimum := 70
+ScoverageSbtPlugin.ScoverageKeys.coverageMinimum := 5
 
 ScoverageSbtPlugin.ScoverageKeys.coverageFailOnMinimum := false
 
