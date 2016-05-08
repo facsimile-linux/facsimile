@@ -2,7 +2,7 @@
 Snapshot backup system
 
 [![Build Status](https://travis-ci.org/facsimile-linux/facsimile.svg?branch=master)](https://travis-ci.org/facsimile-linux/facsimile)
-[![Coverage Status](https://coveralls.io/repos/facsimile-linux/facsimile/badge.svg?branch=master&service=github)](https://coveralls.io/github/facsimile-linux/facsimile?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/facsimile-linux/facsimile/badge.svg?branch=master)](https://coveralls.io/github/facsimile-linux/facsimile?branch=master)
 
 ## Development
 
