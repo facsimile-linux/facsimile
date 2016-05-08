@@ -29,6 +29,7 @@ package info.raack.facsimile
 case class ZFSFilesystem(name: String, path: Option[String], alwaysMounted: Boolean) extends SnapshotFilesystem
     with PipedTransferSupported {
   def pipedTransferType(): String = {
-    "zfs"
+    val me = "zfs"
+    me
   }
 }

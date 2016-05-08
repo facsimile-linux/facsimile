@@ -1,0 +1,13 @@
+Source: snappy
+Maintainer: Taylor Raack <taylor@raack.info>
+Section: misc
+Priority: optional
+Build-Depends: debhelper (>= 9.0.0), wget, java-compiler, java7-jdk
+Standards-Version: 3.9.5
+Homepage: https://github.com/dinoboy197/snappy
+
+Package: snappy
+Architecture: all
+Depends: ${misc:Depends}, java7-jdk
+Description: Unintrusive, simple snapshot backup system
+ Facsimile backups files with snapshots so you don't have to.
