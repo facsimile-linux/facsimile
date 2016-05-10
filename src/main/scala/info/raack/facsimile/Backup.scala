@@ -32,6 +32,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
 import java.time.temporal.ChronoUnit
+import java.time.temporal.WeekFields
 import java.util.Locale
 
 import scala.sys.process.stringToProcess
@@ -275,46 +276,31 @@ object Backup {
       //     else if now - visited snapshot < 30 days while (waiting for > visited snapshot) waiting for = waiting for - 1 day
       //     else while (waiting for > visited snapshot) waiting for = waiting for - 1 week
 
-      var waitingFor = currentSnapshot
-      val oneDayBack = currentSnapshot.minus(1, ChronoUnit.DAYS)
-      val oneMonthBack = currentSnapshot.minus(30, ChronoUnit.DAYS)
+      val oneDayBack = LocalDateTime.ofInstant(currentSnapshot, ZoneId.systemDefault()).withMinute(0).withSecond(0).withNano(0).minus(1, ChronoUnit.DAYS)
+      val oneMonthBack = oneDayBack.withHour(0).minus(30, ChronoUnit.DAYS)
 
-      // ignore first snapshot
-      waitingFor = waitingFor.minus(1, ChronoUnit.HOURS)
+      val weekFields = WeekFields.of(Locale.getDefault())
+      val weekField = weekFields.weekOfWeekBasedYear()
 
+      val set = scala.collection.mutable.Set.empty[String]
       snapshotTimes()
         .sortWith(_.toString > _.toString)
-        .tail // ignore first snapshot
         .foreach(snapshotDate => {
-          println(s"evaling $snapshotDate; waiting for $waitingFor")
-          if (snapshotDate.isAfter(waitingFor)) {
-            // TODO - must ensure zfs allow traack mount,destroy tank/backup/lune-rsnapshot
+          val bucket = LocalDateTime.ofInstant(snapshotDate, ZoneId.systemDefault()) match {
+            case x if x.isAfter(oneDayBack) => "hour" + x.getHour
+            case x if x.isBefore(oneDayBack) && x.isAfter(oneMonthBack) => "day" + x.getDayOfMonth
+            case x => "year" + x.getYear + "week" + x.get(weekField)
+          }
+
+          if (set.contains(bucket)) {
             val command = s"ssh storage zfs destroy tank/backup/lune-rsnapshot@facsimile-$snapshotDate"
             println(s"deleting snapshot $snapshotDate with $command")
             command !!
           } else {
-            if (oneDayBack.isBefore(snapshotDate)) {
-              println("snapshot is not older than one day")
-              while (waitingFor.isAfter(snapshotDate)) {
-                waitingFor = waitingFor.minus(1, ChronoUnit.HOURS)
-                println(s"waiting for moved 1 hour to $waitingFor")
-              }
-            } else if (oneMonthBack.isBefore(snapshotDate)) {
-              println("snapshot is older than one day but not older than one month")
-              while (waitingFor.isAfter(snapshotDate)) {
-                waitingFor = waitingFor.minus(1, ChronoUnit.DAYS)
-                println(s"waiting for moved 1 day to $waitingFor")
-              }
-            } else {
-              println("snapshot is older than one month")
-              while (waitingFor.isAfter(snapshotDate)) {
-                waitingFor = waitingFor.minus(7, ChronoUnit.DAYS)
-                println(s"waiting for moved 1 week to $waitingFor")
-              }
-            }
+            println(s"found new element for bucket $bucket")
+            set += bucket
           }
         })
-
       ""
     }
   }
