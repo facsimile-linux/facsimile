@@ -66,7 +66,7 @@ Possible values for COMMAND
   backup                     complete a backup using the current settings
   schedule-on                turn on scheduled backups
   schedule-off               turn off scheduled backups
-  scheduled-backup           if a backup is required (schedule is on and enough time has past so backups are less than 10% of wall time)
+  scheduled-backup           if a backup is required (schedule is on and enough time has past so backups are less than 25% of wall time)
   help                       print this help
   exit                       exit Facsimile
 """

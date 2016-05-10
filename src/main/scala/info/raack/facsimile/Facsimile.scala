@@ -118,8 +118,8 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   }
 
   private def overdueForBackup(): Boolean = {
-    // we are overdue for backup if the last backup duration fraction of the time elapsed since last start is less than 10%
-    lastTotalMillis.getOrElse(0.toLong).toFloat / (System.currentTimeMillis() - lastStartMillis.getOrElse(0.toLong)).toFloat < 0.1
+    // we are overdue for backup if the last backup duration fraction of the time elapsed since last start is less than 25%
+    lastTotalMillis.getOrElse(0.toLong).toFloat / (System.currentTimeMillis() - lastStartMillis.getOrElse(0.toLong)).toFloat < 0.25
   }
 
   private def printCompletion(percentCompleted: Int): Unit = {
