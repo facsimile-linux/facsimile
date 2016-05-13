@@ -276,8 +276,8 @@ object Backup {
       //     else if now - visited snapshot < 30 days while (waiting for > visited snapshot) waiting for = waiting for - 1 day
       //     else while (waiting for > visited snapshot) waiting for = waiting for - 1 week
 
-      val oneDayBack = LocalDateTime.ofInstant(currentSnapshot, ZoneId.systemDefault()).withMinute(0).withSecond(0).withNano(0).minus(1, ChronoUnit.DAYS)
-      val oneMonthBack = oneDayBack.withHour(0).minus(30, ChronoUnit.DAYS)
+      val oneDayBack = LocalDateTime.ofInstant(currentSnapshot, ZoneId.systemDefault()).minus(1, ChronoUnit.DAYS)
+      val oneMonthBack = oneDayBack.minus(30, ChronoUnit.DAYS)
 
       val weekFields = WeekFields.of(Locale.getDefault())
       val weekField = weekFields.weekOfWeekBasedYear()
