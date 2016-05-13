@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python -u
 # -*- coding: utf-8; -*-
 """
 (C) Copyright 2016 Taylor Raack.
@@ -20,19 +20,57 @@ along with Facsimile.  If not, see <http://www.gnu.org/licenses/>.
 import appindicator
 import gobject
 import gtk
+import fcntl
+import sys
+import threading
+import time
+from rdflib.constants import NIL
+
+gtk.gdk.threads_init()
+        
+class App():
+    def __init__(self):
+        indicator = appindicator.Indicator("facsimile-toolbar","indicator-messages", appindicator.CATEGORY_APPLICATION_STATUS)
+        indicator.set_status(appindicator.STATUS_ACTIVE)
+        indicator.set_attention_icon("indicator-messages-new")
+        
+        menu = gtk.Menu()
+        
+        self.menu_item = gtk.MenuItem("Show backup")
+        menu.append(self.menu_item)
+        # menu_items.connect("activate", menuitem_response, buf)
+        self.menu_item.show()
+        
+        indicator.set_menu(menu)
+
+        th = threading.Thread(target=self.hello, args=())
+        th.daemon = True
+        th.start()
+        
+        gtk.gdk.threads_enter()
+        gtk.main()
+        gtk.gdk.threads_leave()
+    
+    def hello(self):
+        while True:
+            f = open('/var/lock/facsimile', 'w')
+            try:
+                fcntl.lockf(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                
+                gobject.idle_add(self.update_help, "Last backup completed at ")
+            except:
+                try:
+                    with open('/tmp/status','r') as f:
+                        gobject.idle_add(self.update_help, f.read().strip())
+                except:
+                    gobject.idle_add(self.update_help, "unknown status")
+
+            fcntl.lockf(f.fileno(), fcntl.LOCK_UN)
+                
+            time.sleep(1)
+        
+    def update_help(self, data):
+        self.menu_item.set_label(data)
 
 if __name__ == "__main__":
-  indicator = appindicator.Indicator("facsimile-toolbar","indicator-messages", appindicator.CATEGORY_APPLICATION_STATUS)
-  indicator.set_status(appindicator.STATUS_ACTIVE)
-  indicator.set_attention_icon("indicator-messages-new")
-
-  menu = gtk.Menu()
-
-  menu_item = gtk.MenuItem("Show backup")
-  menu.append(menu_item)
-  # menu_items.connect("activate", menuitem_response, buf)
-  menu_item.show()
-
-  indicator.set_menu(menu)
-
-  gtk.main()
+    App()
