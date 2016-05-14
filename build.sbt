@@ -51,7 +51,8 @@ addCompilerPlugin("org.psywerx.hairyfotr" %% "linter" % "0.1.12")
 packAutoSettings
 
 libraryDependencies ++= Seq(
-  "org.scala-lang.modules" %% "scala-pickling" % "[0.10.1, 1)",
+  "org.scala-lang.modules" %% "scala-pickling" % "[0.10.1,1)",
+  "com.google.code.gson" % "gson" % "[2.6.2,3)",
   "org.scalatest" %% "scalatest" % "[2.2.6,3)" % "test",
   "org.scalactic" %% "scalactic" % "[2.2.6,3)" % "test"
 )

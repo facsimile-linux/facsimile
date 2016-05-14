@@ -24,6 +24,8 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
+import com.google.gson.Gson
+
 object FacsimileCLI extends App {
 
   // TODO - make sure that facsimile-toolbar.desktop is installed in /etc/xdg/autostart
@@ -43,7 +45,7 @@ object FacsimileCLI extends App {
       case "schedule-on" => { new Facsimile().schedule(true); None }
       case "schedule-off" => { new Facsimile().schedule(false); None }
       case "backup" => handleBackupOutput(new Facsimile().backup())
-      case "list-snapshots" => { println(new Facsimile().snapshots()); None }
+      case "list-snapshots" => { println(new Gson().toJson(new Facsimile().snapshots().toArray)); None }
       case "help" => { println(help); None }
       case "exit" => Some(0)
       case other => { println(s"$other is not a valid command.\n${help}"); None }

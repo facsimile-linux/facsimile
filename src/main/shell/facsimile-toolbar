@@ -21,10 +21,11 @@ import appindicator
 import gobject
 import gtk
 import fcntl
+import json
+import os
 import sys
 import threading
 import time
-from rdflib.constants import NIL
 
 gtk.gdk.threads_init()
         
@@ -36,41 +37,48 @@ class App():
         
         menu = gtk.Menu()
         
-        self.menu_item = gtk.MenuItem("Show backup")
+        self.menu_item = gtk.MenuItem("Loading...")
         menu.append(self.menu_item)
         # menu_items.connect("activate", menuitem_response, buf)
         self.menu_item.show()
         
         indicator.set_menu(menu)
 
-        th = threading.Thread(target=self.hello, args=())
+        th = threading.Thread(target=self.update_status_menu_item, args=())
         th.daemon = True
         th.start()
         
         gtk.gdk.threads_enter()
         gtk.main()
         gtk.gdk.threads_leave()
-    
-    def hello(self):
-        while True:
-            f = open('/var/lock/facsimile', 'w')
-            try:
-                fcntl.lockf(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                
-                gobject.idle_add(self.update_help, "Last backup completed at ")
-            except:
-                try:
-                    with open('/tmp/status','r') as f:
-                        gobject.idle_add(self.update_help, f.read().strip())
-                except:
-                    gobject.idle_add(self.update_help, "unknown status")
-
-            fcntl.lockf(f.fileno(), fcntl.LOCK_UN)
-                
-            time.sleep(1)
         
-    def update_help(self, data):
-        self.menu_item.set_label(data)
+    def lastBackupTime(self):
+        try:
+            return json.loads(os.popen("facsimile list-snapshots").read())[-1]
+        except:
+            return "unknown"
+    
+    def update_status_menu_item(self):
+        while True:
+            backupRunning = False
+            with open('/var/lock/facsimile', 'w') as lockfile:
+                try:
+                    # if facsimile lock file can be locked, a backup is not running
+                    fcntl.lockf(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.lockf(lockfile.fileno(), fcntl.LOCK_UN)
+                except:
+                    backupRunning = True
+            if backupRunning == True:
+                try:
+                    with open('/var/cache/facsimile/status') as statusfile:
+                        message = "Estimated remaining backup time: %s minutes" % json.loads(statusfile.read()).get(u'time_remaining')
+                        gobject.idle_add(self.menu_item.set_label, message)
+                except:
+                    gobject.idle_add(self.menu_item.set_label, "Estimated remaining backup time: unknown")
+            else:
+                gobject.idle_add(self.menu_item.set_label, "Last backup completed at " + self.lastBackupTime())
+                    
+            time.sleep(5)
 
 if __name__ == "__main__":
     App()

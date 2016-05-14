@@ -28,11 +28,15 @@ import java.time.Instant
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
+import scala.collection.JavaConverters.mapAsJavaMapConverter
+
+import com.google.gson.Gson
 
 class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
-  println(s"Starting up at ${Instant.now()}")
-
+  val statusPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "status")
+  val gson = new Gson()
+  Files.write(statusPath, getStatusString(None).getBytes)
   val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "scheduled")
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
   val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
@@ -70,7 +74,12 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     (StandardFilesystem(), Host("localhost"), ZFSFilesystem("traackbackup", Some("/home/traack/testbackup"), false))
   }
 
+  private def getStatusString(minutesToCompleteOption: Option[Long]): String = {
+    gson.toJson(Map("time_remaining" -> minutesToCompleteOption.getOrElse("unknown")).asJava)
+  }
+
   def scheduledBackup(): Try[String] = {
+    println(s"Starting up at ${Instant.now()}")
     if (shouldBackup()) {
       backup()
     } else {
@@ -142,6 +151,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     val minutesToComplete = (totalMillisToComplete._1 * totalMillisToComplete._2 +
       previousMillisToComplete._1 * previousMillisToComplete._2) / 60000 / (totalMillisToComplete._2 + previousMillisToComplete._2)
 
+    Files.write(statusPath, getStatusString(Some(minutesToComplete)).getBytes)
     lastPercentChange = newLatestTime
     println(s"Percent complete: ${percentCompleted}% ($minutesToComplete minutes estimated remaining)")
   }
