@@ -31,26 +31,30 @@ gtk.gdk.threads_init()
         
 class App():
     def __init__(self):
-        indicator = appindicator.Indicator("facsimile-toolbar","indicator-messages", appindicator.CATEGORY_APPLICATION_STATUS)
-        indicator.set_status(appindicator.STATUS_ACTIVE)
-        indicator.set_attention_icon("indicator-messages-new")
+        self.indicator = appindicator.Indicator("facsimile-toolbar",os.path.abspath('/usr/share/facsimile/images/backup1.svg'), appindicator.CATEGORY_SYSTEM_SERVICES)
+        self.indicator.set_status(appindicator.STATUS_ACTIVE)
         
         menu = gtk.Menu()
         
         self.menu_item = gtk.MenuItem("Loading...")
         menu.append(self.menu_item)
-        # menu_items.connect("activate", menuitem_response, buf)
         self.menu_item.show()
         
-        indicator.set_menu(menu)
+        self.indicator.set_menu(menu)
 
         th = threading.Thread(target=self.update_status_menu_item, args=())
         th.daemon = True
         th.start()
         
+        th2 = threading.Thread(target=self.verify_icon_rotation, args=())
+        th2.daemon = True
+        th2.start()
+        
         gtk.gdk.threads_enter()
         gtk.main()
         gtk.gdk.threads_leave()
+        
+        self.rotateThread = None
         
     def lastBackupTime(self):
         try:
@@ -59,16 +63,17 @@ class App():
             return "unknown"
     
     def update_status_menu_item(self):
+        self.backupRunning = False
         while True:
-            backupRunning = False
             with open('/var/lock/facsimile', 'w') as lockfile:
                 try:
                     # if facsimile lock file can be locked, a backup is not running
                     fcntl.lockf(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                     fcntl.lockf(lockfile.fileno(), fcntl.LOCK_UN)
+                    self.backupRunning = False
                 except:
-                    backupRunning = True
-            if backupRunning == True:
+                    self.backupRunning = True
+            if self.backupRunning == True:
                 try:
                     with open('/var/cache/facsimile/status') as statusfile:
                         message = "Estimated remaining backup time: %s minutes" % json.loads(statusfile.read()).get(u'time_remaining')
@@ -79,6 +84,18 @@ class App():
                 gobject.idle_add(self.menu_item.set_label, "Last backup completed at " + self.lastBackupTime())
                     
             time.sleep(5)
+    
+    def verify_icon_rotation(self):
+        icon = 1
+        while True:
+            if self.backupRunning == True:
+                icon = icon % 16 + 1
+                gobject.idle_add(self.indicator.set_icon, "/usr/share/facsimile/images/backup%s.svg" % icon)
+            elif icon != 1:
+                gobject.idle_add(self.indicator.set_icon, '/usr/share/facsimile/images/backup1.svg')
+                icon = 1
+                    
+            time.sleep(0.1)
 
 if __name__ == "__main__":
     App()
