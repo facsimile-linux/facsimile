@@ -2,12 +2,13 @@ Source: facsimile
 Maintainer: Taylor Raack <taylor@raack.info>
 Section: misc
 Priority: optional
-Build-Depends: debhelper (>= 9.0.0), wget, java-compiler, java7-jdk
+Build-Depends: debhelper (>= 9.0.0), wget, default-jdk
 Standards-Version: 3.9.5
 Homepage: https://github.com/facsimile-linux/facsimile
 
 Package: facsimile
 Architecture: all
-Depends: ${misc:Depends}, java7-jdk
+Depends: ${misc:Depends}, default-jre, rsync, coreutils
+Recommends: openssh-client
 Description: Unintrusive, simple snapshot backup system
  Facsimile backups files with snapshots so you don't have to.
