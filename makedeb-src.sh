@@ -26,6 +26,9 @@ for release in ${RELEASES}; do
 
         #debian: changelog
 	sed -e "s/${PKGNAME} (.*)/${PKGNAME} (${PKGVER}~${release})/g" -e "s/unstable;/${release};/g" -i debian/changelog
+	
+	# build libraries
+	activator clean pack
 
 	debuild -i -S
 

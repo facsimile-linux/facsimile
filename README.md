@@ -23,7 +23,7 @@ https://wiki.debian.org/Java/Packaging
 Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBuilder
 
 ### Publishing
-
+ 
 * To create a new release candidate branch and release:
   * `git stash`
   * `git checkout master`
