@@ -1,8 +1,8 @@
-facsimile (1.1.x-1ubuntu1) UNRELEASED; urgency=medium
+facsimile (1.1.0-1ubuntu1) unstable; urgency=medium
 
-  * Dummy comment (to remove later)
+  * Better packaging
 
- -- Taylor Raack <taylor@raack.info>  Tue, 17 May 2016 22:01:38 -0700
+ -- Taylor Raack <taylor@raack.info>  Wed, 18 May 2016 20:31:33 -0700
 
 facsimile (1.0.0-1) unstable; urgency=low
 
