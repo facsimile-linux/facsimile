@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+# summary of how this script can be called:
+#        * <postinst> configure <most-recently-configured-version>
+#        * <old-preinst> abort-upgrade <new-version>
+#        * <conflictor's-postinst> abort-remove in-favour <package-new-version>
+#        * <postinst> abort-remove
+#        * <deconfigured's-postinst> abort-configure in-favour <failed-install-package-version> [removing <conflicting-package-version>]
+#
+
+set -e
+
+. /usr/share/debconf/confmodule
+
+if [ -n "$DEBIAN_SCRIPT_DEBUG" ]; then set -v -x; DEBIAN_SCRIPT_TRACE=1; fi
+${DEBIAN_SCRIPT_TRACE:+ echo "#42#DEBUG# RUNNING $0 $*" 1>&2 }
+ 
+export PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin
+
+# This command can be used as pipe to syslog. With "-s" it also logs to stderr.
+ERR_LOGGER="logger -p daemon.err -t mysqld_safe -i"
+
+stop_backup() {
+  # TODO - stop any active backup
+  cmd="/usr/bin/facsimile exit"
+  $cmd
+}
+
+# This is necessary because mysql_install_db removes the pid file in /var/run
+# and because changed configuration options should take effect immediately.
+# In case the server wasn't running at all it should be ok if the stop
+# script fails. I can't tell at this point because of the cleaned /var/run.
+set +e; stop_backup; set -e
+    
+case "$1" in
+  configure)
+    statedir=/var/lib/facsimile
+    cachedir=/var/cache/facsimile
+
+    # Ensure the existence and right permissions for the statedir and cachedir files.
+    if [ ! -d "#statedir"  -a ! -L "$statedir" ]; then mkdir "$statedir"; fi
+    if [ ! -d "$cachedir"  -a ! -L "$cachedir" ]; then mkdir "$cachedir"; fi
+    chown -R facsimile:facsimile $cachedir
+    chown -R facsimile:facsimile $statedir
+  ;;
+
+  abort-upgrade|abort-remove|abort-configure)
+  ;;
+
+  *)
+    echo "postinst called with unknown argument '$1'" 1>&2
+    exit 1
+  ;;
+esac
+
+db_stop # in case invoke fails
+
+#DEBHELPER#
+
+exit 0

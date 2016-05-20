@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# summary of how this script can be called:
+#        * <new-preinst> install
+#        * <new-preinst> install <old-version>
+#        * <new-preinst> upgrade <old-version>
+#        * <old-preinst> abort-upgrade <new-version>
+#
+
+set -e
+
+. /usr/share/debconf/confmodule
+
+if [ -n "$DEBIAN_SCRIPT_DEBUG" ]; then set -v -x; DEBIAN_SCRIPT_TRACE=1; fi
+${DEBIAN_SCRIPT_TRACE:+ echo "#42#DEBUG# RUNNING $0 $*" 1>&2 }
+
+export PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin
+DATADIR=/var/lib/facsimile
+CACHEDIR=/var/cache/facsimile
+
+# Try to stop any currently running backups. If this is not successful, let the admin try to do it themselves.
+# We shouldn't remove any directories while a backup is running.
+stop_backup() {
+
+    set +e
+    # TODO - attempt to stop backup correctly
+    cmd="/usr/bin/facsimile exit"
+    $cmd
+    errno=$?
+    set -e
+   
+    # 0=ok, 127=no init script (fresh install)
+    if [ "$errno" != 0 -a "$errno" != 127 ]; then
+      echo "${cmd/ */} returned $errno" 1>&2
+      echo "There is a Facsimile backup running, but it could not be stopped." 1>&2
+      echo "Stop it yourself and try again!" 1>&2
+      db_stop  	
+      exit 1
+    fi
+}
+
+################################ main() ##########################
+
+# to be sure
+stop_server
+
+#
+# Now we have to ensure the following state:
+# /etc/passwd: facsimile:x:100:101:Facsimile Backup User:/nonexistent:/bin/false
+# /etc/group:  facsimile:x:101:
+# 
+# Sadly there could any state be present on the system so we have to
+# modify everything carefully i.e. not doing a chown before creating
+# the user etc...
+#
+
+# creating facsimile group if it isn't already there
+if ! getent group facsimile >/dev/null; then
+ 	# Adding system group: facsimile.
+	addgroup --system facsimile >/dev/null
+fi
+
+# creating facsimile user if it isn't already there
+if ! getent passwd facsimile >/dev/null; then
+	# Adding system user: facsimile.
+	adduser \
+	  --system \
+          --disabled-login \
+	  --ingroup facsimile \
+	  --no-create-home \
+	  --home /nonexistent \
+	  --gecos "Facsimile Backup User" \
+	  --shell /bin/false \
+	  facsimile  >/dev/null
+fi
+
+# creating facsimile library directory
+if [ ! -d $DATADIR -a ! -L $DATADIR ]; then
+ 	mkdir $DATADIR
+fi
+if [ ! -d $CACHEDIR -a ! -L $CACHEDIR ]; then
+ 	mkdir $CACHEDIR
+fi
+
+# Since the home directory was created before putting the user into
+# the facsimile group and moreover we cannot guarantee that the 
+# permissions were correctly *before* calling this script, we fix them now.
+chown facsimile:facsimile $DATADIR
+find $DATADIR -follow -not -group facsimile -print0 2>/dev/null \
+  | xargs -0 --no-run-if-empty chgrp facsimile
+chown facsimile:facsimile $CACHEDIR
+find $CACHEDIR -follow -not -group facsimile -print0 2>/dev/null \
+  | xargs -0 --no-run-if-empty chgrp facsimile
+
+db_stop
+
+#DEBHELPER#
+
+exit 0
