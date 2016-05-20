@@ -25,7 +25,7 @@ stop_backup() {
     set +e
     # TODO - attempt to stop backup correctly
     cmd="/usr/bin/facsimile exit"
-    $cmd
+    $cmd 2>/dev/null
     errno=$?
     set -e
    
@@ -42,7 +42,7 @@ stop_backup() {
 ################################ main() ##########################
 
 # to be sure
-stop_server
+stop_backup
 
 #
 # Now we have to ensure the following state:

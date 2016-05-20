@@ -15,35 +15,6 @@ fi
 if [ -n "$DEBIAN_SCRIPT_DEBUG" ]; then set -v -x; DEBIAN_SCRIPT_TRACE=1; fi
 ${DEBIAN_SCRIPT_TRACE:+ echo "#42#DEBUG# RUNNING $0 $*" 1>&2 }
 
-# Try to stop a backup in a sane way. If it does not success let the admin
-# do it himself. No backup directories should be removed while a backup
-# is running!
-stop_backup() {
-  set +e
-  # TODO - attempt to stop backup correctly
-  cmd="/usr/bin/facsimile exit"
-  $cmd
-  errno=$?
-  set -e
-   
-  if [ "$?" != 0 ]; then
-    echo "Trying to stop a Facsimile backup resulted in exitcode $?." 1>&2
-    echo "Stop it yourself and try again!" 1>&2
-    exit 1
-  fi
-}
-
-case "$1" in
-  purge|remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-    stop_backup
-    sleep 2
-  ;;
-  *)
-    echo "postrm called with unknown argument '$1'" 1>&2
-    exit 1
-  ;;
-esac
-
 #
 # - Do NOT purge logs or data if another facsimile package is installed
 # - Remove the facsimile user only after all its owned files are purged.
@@ -56,7 +27,6 @@ if [ "$1" = "purge" -a ! \( -x /usr/bin/facsimile -o -L /usr/bin/facsimile \) ];
   rm -rf /var/cache/facsimile
   rm -rf /var/lock/facsimile
   userdel facsimile || true
-  groupdel facsimile || true
 fi
 
 if [ "$1" = purge ] && [ -e /usr/share/debconf/confmodule ]; then

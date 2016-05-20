@@ -38,7 +38,7 @@ case "$1" in
     cachedir=/var/cache/facsimile
 
     # Ensure the existence and right permissions for the statedir and cachedir files.
-    if [ ! -d "#statedir"  -a ! -L "$statedir" ]; then mkdir "$statedir"; fi
+    if [ ! -d "$statedir"  -a ! -L "$statedir" ]; then mkdir "$statedir"; fi
     if [ ! -d "$cachedir"  -a ! -L "$cachedir" ]; then mkdir "$cachedir"; fi
     chown -R facsimile:facsimile $cachedir
     chown -R facsimile:facsimile $statedir
