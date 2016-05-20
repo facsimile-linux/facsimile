@@ -42,6 +42,8 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
+import com.google.gson.Gson
+
 object Backup {
 
   val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "total")
@@ -57,8 +59,8 @@ object Backup {
    * i believe (verify through experiment) that no-whole-file be used for sshfs systems, because even though the destination looks like it is local, it is actually remote
    * 
    * local:
-   * local non-snapshotting -> local: sudo rsync --link-dest some-dir / /backup/
-   * local snapshotting -> local: zfs send | zfs receive
+   * local non-snapshotting (no zfs or 32 bit) -> local: sudo rsync --link-dest some-dir / /backup/
+   * local snapshotting (zfs and 64 bit) -> local: zfs send | zfs receive
    * 
    * remote:
    * remote snapshots available:
@@ -79,7 +81,7 @@ object Backup {
    */
 
   // TODO - allow status callbacks so CLI can have information and print it there
-  def process(source: Filesystem, target: Host, destination: Filesystem, progressNotifier: (Int) => Unit): Try[String] = {
+  def process(source: Filesystem, target: Host, destination: Filesystem, tempConfig: Map[String, Object], progressNotifier: (Int) => Unit): Try[String] = {
 
     (source, destination) match {
       case (s: PipedTransferSupported, d: PipedTransferSupported) if s.pipedTransferType == d.pipedTransferType => {
@@ -95,7 +97,7 @@ object Backup {
         // if not, warn user that backup and restore will take longer than necessary until they can enable xattrs for
         // the destination filesystem OR they can login as root
 
-        var mountDir = "traack@transmission:/mnt/tank/backup/lune-rsnapshot/backup/localhost"
+        var mountDir = tempConfig("destination")
         //val one = s"mkdir -p $mountDir" !!
         //val two = s"sudo sshfs root@backup:/mnt/tank/backup/lune-rsnapshot/backup/localhost/ $mountDir" !!
 
@@ -205,11 +207,11 @@ object Backup {
             println(s"total transferred: $completed; total rsync said would be transferred: $totalFiles")
             // snapshot
             val snapshotInstant = Instant.now()
-            val command2 = s"ssh root@backup zfs snapshot tank/backup/lune-rsnapshot@facsimile-${snapshotInstant.toString}"
+            val command2 = s"${tempConfig("remote-host-connect")} zfs snapshot ${tempConfig("dataset")}@facsimile-${snapshotInstant.toString}"
             println(command2)
             val output2 = command2 !!
 
-            cullSnapshots(snapshotInstant)
+            cullSnapshots(snapshotInstant, tempConfig)
           }
           case e => e
         }
@@ -229,7 +231,7 @@ object Backup {
     ty + hourFormatter.format(time)
   }
 
-  def snapshots(): Seq[String] = {
+  def snapshots(tempConfig: Map[String, Object]): Seq[String] = {
     val current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
     val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
@@ -242,17 +244,17 @@ object Backup {
       .withLocale(Locale.ENGLISH)
       .withZone(ZoneId.systemDefault())
 
-    snapshotTimes()
+    snapshotTimes(tempConfig)
       .sortWith(_.toString < _.toString)
       .map(x => {
         if (x.isBefore(oneMonthBack)) { monthFormatter.format(x) } else if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }
       })
   }
 
-  private def snapshotTimes(): Seq[Instant] = {
-    val dataset = "tank/backup/lune-rsnapshot"
+  private def snapshotTimes(tempConfig: Map[String, Object]): Seq[Instant] = {
+    val dataset = tempConfig("dataset")
     val length = (dataset + "@facsimile-").length
-    val output: String = s"ssh storage zfs list -t snapshot -r $dataset" !!
+    val output: String = s"${tempConfig("remote-snapshot-host")} zfs list -t snapshot -r $dataset" !!
 
     var current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
@@ -262,7 +264,7 @@ object Backup {
       .flatMap { str => Try { Instant.parse(str.substring(length, length + 24)) }.toOption }
   }
 
-  private def cullSnapshots(currentSnapshot: Instant): Try[String] = {
+  private def cullSnapshots(currentSnapshot: Instant, tempConfig: Map[String, Object]): Try[String] = {
     Try {
       // keep all hourly snapshots for last 24 hours
       // keep all daily backups for the last month
@@ -283,7 +285,7 @@ object Backup {
       val weekField = weekFields.weekOfWeekBasedYear()
 
       val set = scala.collection.mutable.Set.empty[String]
-      snapshotTimes()
+      snapshotTimes(tempConfig)
         .sortWith(_.toString > _.toString)
         .foreach(snapshotDate => {
           val bucket = LocalDateTime.ofInstant(snapshotDate, ZoneId.systemDefault()) match {
@@ -293,7 +295,7 @@ object Backup {
           }
 
           if (set.contains(bucket)) {
-            val command = s"ssh storage zfs destroy tank/backup/lune-rsnapshot@facsimile-$snapshotDate"
+            val command = s"${tempConfig("remote-snapshot-host")} zfs destroy ${tempConfig("dataset")}@facsimile-$snapshotDate"
             println(s"deleting snapshot $snapshotDate with $command")
             command !!
           } else {

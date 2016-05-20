@@ -29,19 +29,24 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.collection.JavaConverters.mapAsScalaMapConverter
 
 import com.google.gson.Gson
 
 class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   val statusPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "status")
+  val configPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "config")
   val gson = new Gson()
   Files.write(statusPath, getStatusString(None).getBytes)
-  val scheduleFile = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "scheduled")
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
   val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
+
+  val config = Try {
+    gson.fromJson(new String(Files.readAllBytes(configPath)), classOf[java.util.Map[String, Object]]).asScala
+  }.getOrElse(scala.collection.mutable.Map("schedule-enabled" -> Boolean.box(false)))
 
   val lastStartMillis = Try {
     Some(new String(Files.readAllBytes(lastStartTimePath)).toLong)
@@ -91,7 +96,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     // check for presence of cron task
     Option(new FileOutputStream("/var/lock/facsimile").getChannel().tryLock()).map { lock =>
       try {
-        Backup.process(sourceFilesystem, targetHost, targetFilesystem, printCompletion) match {
+        Backup.process(sourceFilesystem, targetHost, targetFilesystem, config.toMap, printCompletion) match {
           case Success(message) => {
             val endTime = System.currentTimeMillis()
             Files.write(lastStartTimePath, startTime.toString.getBytes)
@@ -108,19 +113,24 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   def schedule(turnOn: Boolean): Unit = {
     if (turnOn) {
-      Files.write(scheduleFile, "on".getBytes)
+      config.put("schedule-enabled", Boolean.box(true))
     } else {
-      Files.delete(scheduleFile)
+      config.put("schedule-enabled", Boolean.box(false))
     }
+    writeConfig()
   }
 
   def snapshots(): Seq[String] = {
-    Backup.snapshots()
+    Backup.snapshots(config.toMap)
+  }
+
+  private def writeConfig(): Unit = {
+    Files.write(configPath, gson.toJson(config.asJava).getBytes)
   }
 
   private def shouldBackup(): Boolean = {
     // don't back up if last backup duration / (now - last backup time start) > 10%
-    val scheduled = Files.exists(scheduleFile)
+    val scheduled = config("schedule-enabled") == true
     val overdue = overdueForBackup()
     println(s"scheduled: $scheduled; overdue: $overdue")
     scheduled && overdue
