@@ -31,9 +31,8 @@ Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBu
   * `previousreleasesha=$(git log --format=format:%H -n 1 --grep="Release version")`
   * `changes=$(git log --format=%B $previousreleasesha..HEAD)`
   * `dch --newversion <next minor version, like 1.3.0-1ubuntu1> "$changes"`
-    * Group commits into changes appropriate for a changelist
   * `dch --release --distribution unstable`
-    * Just look to make sure everything is ok
+    * Group commits into changes appropriate for a changelist
   * `git add debian/changelog && git commit -m "Release version <release version>"`
   * `git checkout -b <new candidate release branch identifier>`
   * `git tag <release version>`
@@ -49,9 +48,8 @@ Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBu
   * `changes=$(git log --format=%B $previousreleasesha..HEAD)`
   * `git checkout master`
   * `dch --newversion <next minor version, like 1.3.1-1ubuntu1> "$changes"`
-    * Group commits into changes appropriate for a changelist
   * `dch --release --distribution unstable`
-    * Just look to make sure everything is ok
+    * Group commits into changes appropriate for a changelist
   * `git add debian/changelog && git commit -m "Release version <release version>"`
   * `lastcommit=$(git rev-list HEAD -n 1)`
   * `git checkout <release branch>`
