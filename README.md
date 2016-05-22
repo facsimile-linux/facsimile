@@ -28,22 +28,34 @@ Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBu
   * `git stash`
   * `git checkout master`
   * `git pull --rebase`
-  * `dch --release --distribution unstable # update version number to concrete version`
+  * `previousreleasesha=$(git log --format=format:%H -n 1 --grep="Release version")`
+  * `changes=$(git log --format=%B $previousreleasesha..HEAD)`
+  * `dch --newversion <next minor version, like 1.3.0-1ubuntu1> "$changes"`
+    * Group commits into changes appropriate for a changelist
+  * `dch --release --distribution unstable`
+    * Just look to make sure everything is ok
   * `git add debian/changelog && git commit -m "Release version <release version>"`
   * `git checkout -b <new candidate release branch identifier>`
   * `git tag <release version>`
   * `git push origin <new candidate release branch identifier> --tags`
   * `git checkout master`
-  * `dch --newversion <next version, like 1.3.x-1ubuntu1> # add dummy comment and save`
-  * `git add debian/changelog && git commit -m "Prepare for next development iteration"`
-  * `git push origin master`
   * `git stash pop`
 * To create patch of existing release series:
   * `git stash`
   * `git checkout <release branch>`
-  * `git cherry-pick -x <sha> # do this repeatedly for shas to integrate`
-  * `dch --release # update version number to concrete version`
+  * `git cherry-pick -x <sha>`
+    * Do this repeatedly for shas to integrate
+  * `previousreleasesha=$(git log --format=format:%H -n 1 --grep="Release version")`
+  * `changes=$(git log --format=%B $previousreleasesha..HEAD)`
+  * `git checkout master`
+  * `dch --newversion <next minor version, like 1.3.1-1ubuntu1> "$changes"`
+    * Group commits into changes appropriate for a changelist
+  * `dch --release --distribution unstable`
+    * Just look to make sure everything is ok
   * `git add debian/changelog && git commit -m "Release version <release version>"`
+  * `lastcommit=$(git rev-list HEAD -n 1)`
+  * `git checkout <release branch>`
+  * `git cherry-pick -x $lastcommit`
   * `git tag <release version>`
   * `git push origin <new candidate release branch identifier> --tags`
   * `git checkout master`
