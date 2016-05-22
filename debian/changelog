@@ -1,8 +1,11 @@
-facsimile (1.2.x-1ubuntu1) UNRELEASED; urgency=medium
+facsimile (1.2.0-1ubuntu1) unstable; urgency=medium
 
-  * Dummy commit
+  * Proper cleanup of files on package purge
+  * Run correctly as facsimile user
+  * Central JSON configuration file
+  * Make package smaller
 
- -- Taylor Raack <taylor@raack.info>  Wed, 18 May 2016 20:32:51 -0700
+ -- Taylor Raack <taylor@raack.info>  Sun, 22 May 2016 09:20:38 -0700
 
 facsimile (1.1.0-1ubuntu1) unstable; urgency=medium
 
