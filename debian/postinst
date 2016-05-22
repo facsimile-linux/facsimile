@@ -42,6 +42,11 @@ case "$1" in
     if [ ! -d "$cachedir"  -a ! -L "$cachedir" ]; then mkdir "$cachedir"; fi
     chown -R facsimile:facsimile $cachedir
     chown -R facsimile:facsimile $statedir
+    touch /var/log/facsimile.log
+    chown facsimile:facsimile /var/log/facsimile.log
+
+    # TODO - create private / public key file ONLY if it doesn't exist already
+    # ssh-keygen with some arguments so that it doesn't ask for a password
   ;;
 
   abort-upgrade|abort-remove|abort-configure)

@@ -68,11 +68,16 @@ if ! getent passwd facsimile >/dev/null; then
           --disabled-login \
 	  --ingroup facsimile \
 	  --no-create-home \
-	  --home /nonexistent \
+	  --home $DATADIR \
 	  --gecos "Facsimile Backup User" \
 	  --shell /bin/false \
 	  facsimile  >/dev/null
 fi
+
+# facsimile needs sudo access to the rsync command
+# TODO - restrict to running rsync
+echo "facsimile ALL=(ALL) NOPASSWD: /usr/bin/nice" > /etc/sudoers.d/facsimile
+chmod 440 /etc/sudoers.d/facsimile
 
 # creating facsimile library directory
 if [ ! -d $DATADIR -a ! -L $DATADIR ]; then

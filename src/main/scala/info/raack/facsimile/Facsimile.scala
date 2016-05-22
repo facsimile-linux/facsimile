@@ -38,7 +38,6 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   val statusPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "status")
   val configPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "config")
   val gson = new Gson()
-  Files.write(statusPath, getStatusString(None).getBytes)
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
   val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
   var lastPercentChange = System.currentTimeMillis()
@@ -86,6 +85,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   def scheduledBackup(): Try[String] = {
     println(s"Starting up at ${Instant.now()}")
     if (shouldBackup()) {
+      Files.write(statusPath, getStatusString(None).getBytes)
       backup()
     } else {
       Success("Backup not required at this time.")

@@ -8,7 +8,7 @@ Homepage: https://github.com/facsimile-linux/facsimile
 
 Package: facsimile
 Architecture: all
-Depends: ${misc:Depends}, default-jre, rsync, coreutils
+Depends: ${misc:Depends}, default-jre, rsync, coreutils, sudo
 Recommends: openssh-client
 Description: Unintrusive, simple snapshot backup system
  Facsimile backups files with snapshots so you don't have to.
