@@ -1,0 +1,12 @@
+Source: facsimile-toolbar
+Maintainer: Taylor Raack <taylor@raack.info>
+Section: misc
+Priority: optional
+Build-Depends: debhelper (>= 9.0.0)
+Standards-Version: 3.9.5
+Homepage: https://github.com/facsimile-linux/facsimile
+
+Package: facsimile-toolbar
+Architecture: all
+Depends: ${misc:Depends}, facsimile
+Description: Unintrusive, simple snapshot backup system Unity toolbar.

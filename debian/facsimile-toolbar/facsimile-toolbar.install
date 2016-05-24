@@ -1,0 +1,3 @@
+src/main/shell/facsimile-toolbar usr/bin
+src/main/shell/facsimile-toolbar.desktop etc/xdg/autostart
+src/main/images usr/share/facsimile-toolbar

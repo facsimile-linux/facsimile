@@ -1,0 +1,20 @@
+facsimile-toolbar (1.2.0-1ubuntu1) unstable; urgency=medium
+
+  * Proper cleanup of files on package purge
+  * Run correctly as facsimile user
+  * Central JSON configuration file
+  * Make package smaller
+
+ -- Taylor Raack <taylor@raack.info>  Sun, 22 May 2016 09:20:38 -0700
+
+facsimile-toolbar (1.1.0-1ubuntu1) unstable; urgency=medium
+
+  * Better packaging
+
+ -- Taylor Raack <taylor@raack.info>  Wed, 18 May 2016 20:31:33 -0700
+
+facsimile-toolbar (1.0.0-1) unstable; urgency=low
+
+  * Initial release.
+
+ -- Taylor Raack <taylor@raack.info>  Tue, 17 May 2016 21:54:15 -0700

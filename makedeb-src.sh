@@ -2,12 +2,13 @@
 
 set -e
 
-if [ -z "$1" ]; then echo "version is unset"; exit 1; fi
+if [ -z "$1" ]; then echo "package name is unset"; exit 1; fi
+if [ -z "$2" ]; then echo "version is unset"; exit 1; fi
 
 RELEASES="trusty"
 
-PKGNAME=facsimile
-PKGVER=$1
+PKGNAME=$
+PKGVER=$2
 TMP=$(mktemp -d)
 CURRENT=$(pwd)
 
@@ -23,6 +24,9 @@ for release in ${RELEASES}; do
 	mkdir ${DST}
 	cp -aR ${CURRENT}/* ${DST}
 	cd ${DST}
+	mv debian/${PKGNAME} debian-${PKGNAME}
+	rm -rf debian
+	mv debian-${PKGNAME} debian
 
         #debian: changelog
 	sed -e "s/${PKGNAME} (.*)/${PKGNAME} (${PKGVER}~${release})/g" -e "s/unstable;/${release};/g" -i debian/changelog

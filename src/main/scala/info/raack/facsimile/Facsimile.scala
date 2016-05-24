@@ -23,7 +23,9 @@ import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.FileSystems
+import java.nio.file.attribute.PosixFilePermission
 import java.time.Instant
+import java.util.HashSet
 
 import scala.util.Failure
 import scala.util.Success
@@ -85,7 +87,6 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   def scheduledBackup(): Try[String] = {
     println(s"Starting up at ${Instant.now()}")
     if (shouldBackup()) {
-      Files.write(statusPath, getStatusString(None).getBytes)
       backup()
     } else {
       Success("Backup not required at this time.")
@@ -93,6 +94,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   }
 
   def backup(): Try[String] = {
+    Files.write(statusPath, getStatusString(None).getBytes)
     // check for presence of cron task
     Option(new FileOutputStream("/var/lock/facsimile").getChannel().tryLock()).map { lock =>
       try {
@@ -126,6 +128,12 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   private def writeConfig(): Unit = {
     Files.write(configPath, gson.toJson(config.asJava).getBytes)
+    val perms = new HashSet[PosixFilePermission]()
+    perms.add(PosixFilePermission.OWNER_READ)
+    perms.add(PosixFilePermission.OWNER_WRITE)
+    perms.add(PosixFilePermission.GROUP_READ)
+    perms.add(PosixFilePermission.OTHERS_READ)
+    Files.setPosixFilePermissions(configPath, perms);
   }
 
   private def shouldBackup(): Boolean = {
