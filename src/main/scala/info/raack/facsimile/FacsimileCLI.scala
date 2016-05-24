@@ -19,6 +19,7 @@
 
 package info.raack.facsimile
 
+import scala.collection.JavaConverters.mapAsJavaMapConverter
 import scala.io.Source
 import scala.util.Failure
 import scala.util.Success
@@ -46,6 +47,7 @@ object FacsimileCLI extends App {
       case "schedule-off" => { new Facsimile().schedule(false); None }
       case "backup" => handleBackupOutput(new Facsimile().backup())
       case "list-snapshots" => { println(new Gson().toJson(new Facsimile().snapshots().toArray)); None }
+      case "get-configuration" => { println(new Gson().toJson(new Facsimile().configuration().asJava)); None }
       case "help" => { println(help); None }
       case "exit" => Some(0)
       case other => { println(s"$other is not a valid command.\n${help}"); None }

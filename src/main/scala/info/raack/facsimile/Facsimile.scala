@@ -126,6 +126,10 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     Backup.snapshots(config.toMap)
   }
 
+  def configuration(): Map[String, Object] = {
+    config.toMap
+  }
+
   private def writeConfig(): Unit = {
     Files.write(configPath, gson.toJson(config.asJava).getBytes)
     val perms = new HashSet[PosixFilePermission]()
