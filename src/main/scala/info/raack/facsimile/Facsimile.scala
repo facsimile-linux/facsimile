@@ -57,12 +57,6 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     Some(new String(Files.readAllBytes(totalTimePath)).trim.toLong)
   }.getOrElse(None)
 
-  // TODO - use user facsimile for cron scheduling, which must have root privs to get all data
-  // "3 * * * * facsimile /usr/bin/facsimile scheduled-backup >> /var/log/facsimile.log 2>&1"
-
-  // TODO - install /var/cache/facsimile and /var/lib/facsimile directories, owned by facsimile user
-
-  // TODO - on install, touch file /var/log/facsimile.log and make owned by facsimile
   // TODO - rotate with /etc/logrotate.d/package
   /*
    * /var/log/facsimile.log {

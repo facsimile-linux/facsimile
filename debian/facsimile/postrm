@@ -28,6 +28,7 @@ if [ "$1" = "purge" -a ! \( -x /usr/bin/facsimile -o -L /usr/bin/facsimile \) ];
   rm -rf /var/lock/facsimile
   rm -rf /etc/sudoers.d/facsimile
   rm -rf /var/log/facsimile.log
+  rm -rf /etc/cron.d/facsimile
   userdel facsimile || true
 fi
 

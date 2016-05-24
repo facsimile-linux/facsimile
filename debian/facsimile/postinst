@@ -46,6 +46,7 @@ case "$1" in
     chown facsimile:facsimile /var/log/facsimile.log
     touch /var/lock/facsimile
     chmod ugo+w /var/lock/facsimile
+    echo '3 * * * * facsimile /usr/bin/facsimile scheduled-backup >> /var/log/facsimile.log 2>&1' > /etc/cron.d/facsimile
 
     # TODO - create private / public key file ONLY if it doesn't exist already
     # ssh-keygen with some arguments so that it doesn't ask for a password
