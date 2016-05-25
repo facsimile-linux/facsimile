@@ -2,4 +2,4 @@
 
 set -e
 
-/usr/bin/java -cp "/usr/share/facsimile/lib/*" info.raack.facsimile.FacsimileCLI $@
+/usr/bin/java -cp "/usr/share/facsimile/lib/*" info.raack.facsimile.FacsimileCLI $@ <&0

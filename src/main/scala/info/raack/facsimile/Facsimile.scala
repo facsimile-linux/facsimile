@@ -45,7 +45,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
 
-  val config = Try {
+  val config: scala.collection.mutable.Map[String, Object] = Try {
     gson.fromJson(new String(Files.readAllBytes(configPath)), classOf[java.util.Map[String, Object]]).asScala
   }.getOrElse(scala.collection.mutable.Map("schedule-enabled" -> Boolean.box(false)))
 
@@ -122,6 +122,12 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   def configuration(): Map[String, Object] = {
     config.toMap
+  }
+
+  def configuration(newConfig: Map[String, Object]): Unit = {
+    config.clear()
+    config ++= newConfig
+    writeConfig()
   }
 
   private def writeConfig(): Unit = {
