@@ -89,6 +89,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   def backup(): Try[String] = {
     Files.write(statusPath, getStatusString(None).getBytes)
+    setReadAllPerms(statusPath)
     // check for presence of cron task
     Option(new FileOutputStream("/var/lock/facsimile").getChannel().tryLock()).map { lock =>
       try {
@@ -132,12 +133,16 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   private def writeConfig(): Unit = {
     Files.write(configPath, gson.toJson(config.asJava).getBytes)
+    setReadAllPerms(configPath)
+  }
+  
+  private def setReadAllPerms(path: Path): Unit = {
     val perms = new HashSet[PosixFilePermission]()
     perms.add(PosixFilePermission.OWNER_READ)
     perms.add(PosixFilePermission.OWNER_WRITE)
     perms.add(PosixFilePermission.GROUP_READ)
     perms.add(PosixFilePermission.OTHERS_READ)
-    Files.setPosixFilePermissions(configPath, perms);
+    Files.setPosixFilePermissions(path, perms)
   }
 
   private def shouldBackup(): Boolean = {
