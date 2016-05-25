@@ -88,9 +88,11 @@ class App():
                     fcntl.lockf(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                     fcntl.lockf(lockfile.fileno(), fcntl.LOCK_UN)
                     self.backupRunning = False
+                    gobject.idle_add(self.config_item.set_label, "Edit Configuration...")
                 except:
                     self.backupRunning = True
-                self.config_item.set_sensitive(not self.backupRunning)
+                    gobject.idle_add(self.config_item.set_label, "Edit Configuration disabled during backup")
+                gobject.idle_add(self.config_item.set_sensitive, not self.backupRunning)
             if self.backupRunning == True:
                 try:
                     with open('/var/cache/facsimile/status') as statusfile:
