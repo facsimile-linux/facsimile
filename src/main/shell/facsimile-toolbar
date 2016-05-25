@@ -28,7 +28,11 @@ import threading
 import time
 
 gtk.gdk.threads_init()
-        
+
+class ConfigurationDialog():
+    def me(self):
+        i = 4
+
 class App():
     def __init__(self):
         self.indicator = appindicator.Indicator("facsimile-toolbar",os.path.abspath('/usr/share/facsimile-toolbar/images/backup1.svg'), appindicator.CATEGORY_SYSTEM_SERVICES)
@@ -38,7 +42,11 @@ class App():
         
         self.menu_item = gtk.MenuItem("Loading...")
         menu.append(self.menu_item)
+        self.config_item = gtk.MenuItem("Edit Configuration...")
+        menu.append(self.config_item)
         self.menu_item.show()
+        self.config_item.show()
+        self.config_item.connect('activate', self.open_configuration)
         
         self.indicator.set_menu(menu)
 
@@ -55,6 +63,15 @@ class App():
         gtk.gdk.threads_leave()
         
         self.rotateThread = None
+    
+    def open_configuration(self, item):
+        if backupRunning:
+            return
+        dialog = gtk.Dialog(title=None, parent=None, flags=0, buttons=None)
+        dialog.vbox.pack_start(gtk.Label('This is just a Test'))
+        dialog.show_all()
+        dialog.run() 
+        dialog.hide()
         
     def lastBackupTime(self):
         try:
@@ -73,6 +90,7 @@ class App():
                     self.backupRunning = False
                 except:
                     self.backupRunning = True
+                self.config_item.set_sensitive(not self.backupRunning)
             if self.backupRunning == True:
                 try:
                     with open('/var/cache/facsimile/status') as statusfile:
@@ -90,9 +108,9 @@ class App():
         while True:
             if self.backupRunning == True:
                 icon = icon % 16 + 1
-                gobject.idle_add(self.indicator.set_icon, "/usr/share/facsimile/images/backup%s.svg" % icon)
+                gobject.idle_add(self.indicator.set_icon, "/usr/share/facsimile-toolbar/images/backup%s.svg" % icon)
             elif icon != 1:
-                gobject.idle_add(self.indicator.set_icon, '/usr/share/facsimile/images/backup1.svg')
+                gobject.idle_add(self.indicator.set_icon, '/usr/share/facsimile-toolbar/images/backup1.svg')
                 icon = 1
                     
             time.sleep(0.1)
