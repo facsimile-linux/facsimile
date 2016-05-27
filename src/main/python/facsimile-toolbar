@@ -1,0 +1,155 @@
+#! /usr/bin/python3 -u
+# -*- coding: utf-8; -*-
+"""
+(C) Copyright 2016 Taylor Raack.
+
+Facsimile Toolbar is free software: you can redistribute it and/or modify
+it under the terms of the Affero GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Facsimile Toolbar is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+Affero GNU General Public License for more details.
+
+You should have received a copy of the Affero GNU General Public License
+along with Facsimile Toolbar.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+from gi.repository import AppIndicator3
+from gi.repository import Gtk, GLib, GObject
+import collections
+import fcntl
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+
+Configuration = collections.namedtuple('Configuration', ['remote_host', 'schedule_enabled', 'dataset', 'remote_host_path', 'remote_host_user'])
+
+class ConfigurationDialog():
+    def __init__(self, save_configuration_callback):
+        self.reset_on_show = True
+        self.save_configuration_callback = save_configuration_callback
+        self.gladefile = "/home/traack/Programming/github/facsimile-linux/facsimile/src/main/glade/facsimile-configuration.glade"  
+        self.builder = Gtk.Builder()
+        self.builder.add_from_file(self.gladefile)
+
+        self.builder.connect_signals(self)
+    
+        self.window = self.builder.get_object("configuration")
+
+    def show(self):
+        self.window.present()
+        
+    def on_apply_clicked(self, item):
+        error = self.save_configuration_callback(Configuration(
+                                                       remote_host = "transmission",
+                                                       schedule_enabled = True,
+                                                       dataset = "tank/backup/lune-rsnapshot",
+                                                       remote_host_path = "/mnt/tank/backup/lune-rsnapshot/backup/localhost",
+                                                       remote_host_user = "traack"))
+        if not error:
+            self.close_and_reset()
+        else:
+            print(error)
+        
+    def on_cancel_clicked(self, item):
+        self.close_and_reset()
+        
+    def close_and_reset(self):
+        self.reset_on_show = True
+        self.window.hide()
+    
+    def on_configuration_delete_event(self, item, item2):
+        self.close_and_reset()
+        # don't actually delete the window, just hide
+        return True
+
+class App():
+    def __init__(self):
+        self.configuration_dialog = ConfigurationDialog(self.save_configuration)
+        self.indicator = AppIndicator3.Indicator.new("facsimile-toolbar",os.path.abspath('/usr/share/facsimile-toolbar/images/backup1.svg'), AppIndicator3.IndicatorCategory.SYSTEM_SERVICES)
+        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        
+        menu = Gtk.Menu()
+        
+        self.menu_item = Gtk.MenuItem("Loading...")
+        menu.append(self.menu_item)
+        self.config_item = Gtk.MenuItem("Edit Configuration...")
+        menu.append(self.config_item)
+        self.menu_item.show()
+        self.config_item.show()
+        self.config_item.connect('activate', self.open_configuration_window)
+        
+        self.indicator.set_menu(menu)
+
+        th = threading.Thread(target=self.update_status_menu_item, args=())
+        th.daemon = True
+        th.start()
+        
+        th2 = threading.Thread(target=self.verify_icon_rotation, args=())
+        th2.daemon = True
+        th2.start()
+
+        GLib.MainLoop().run()
+        
+    def save_configuration(self, configuration):
+        with subprocess.Popen(["facsimile", "set-configuration"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as proc:
+            (stdout_data, stderr_data) = proc.communicate("test data")
+            return None if proc.returncode == 0 else "%s %s" % (stdout_data, stderr_data)
+    
+    def open_configuration_window(self, item):
+        if self.backupRunning:
+            return
+        self.configuration_dialog.show()
+        
+    def lastBackupTime(self):
+        try:
+            return json.loads(os.popen("facsimile list-snapshots").read())[-1]
+        except:
+            return "unknown"
+    
+    def update_status_menu_item(self):
+        self.backupRunning = False
+        while True:
+            with open('/var/lock/facsimile', 'w') as lockfile:
+                try:
+                    # if facsimile lock file can be locked, a backup is not running
+                    fcntl.lockf(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.lockf(lockfile.fileno(), fcntl.LOCK_UN)
+                    self.backupRunning = False
+                    GLib.idle_add(self.config_item.set_label, "Edit Configuration...")
+                except:
+                    self.backupRunning = True
+                    GLib.idle_add(self.config_item.set_label, "Edit Configuration disabled during backup")
+                GLib.idle_add(self.config_item.set_sensitive, not self.backupRunning)
+            if self.backupRunning == True:
+                try:
+                    with open('/var/cache/facsimile/status') as statusfile:
+                        message = "Estimated remaining backup time: %s minutes" % json.loads(statusfile.read()).get(u'time_remaining')
+                        GLib.idle_add(self.menu_item.set_label, message)
+                except:
+                    GLib.idle_add(self.menu_item.set_label, "Estimated remaining backup time: unknown")
+            else:
+                GLib.idle_add(self.menu_item.set_label, "Last backup completed at " + self.lastBackupTime())
+                    
+            time.sleep(5)
+    
+    def verify_icon_rotation(self):
+        icon = 1
+        while True:
+            if self.backupRunning == True:
+                icon = icon % 16 + 1
+                GLib.idle_add(self.indicator.set_icon, "/usr/share/facsimile-toolbar/images/backup%s.svg" % icon)
+            elif icon != 1:
+                GLib.idle_add(self.indicator.set_icon, '/usr/share/facsimile-toolbar/images/backup1.svg')
+                icon = 1
+                    
+            time.sleep(0.1)
+
+if __name__ == "__main__":
+    App()

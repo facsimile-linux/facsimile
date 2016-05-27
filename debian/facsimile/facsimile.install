@@ -1,2 +1,3 @@
 target/pack/lib usr/share/facsimile
 src/main/shell/facsimile usr/bin
+LICENSE /usr/share/facsimile
