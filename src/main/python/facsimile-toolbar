@@ -23,6 +23,7 @@ import collections
 import fcntl
 import json
 import os
+import stat
 import subprocess
 import sys
 import threading
@@ -68,6 +69,9 @@ class ConfigurationDialog():
         self.close_and_reset()
         # don't actually delete the window, just hide
         return True
+    
+    def on_backup_type_changed(self, item):
+        print(item)
 
 class App():
     def __init__(self):
@@ -116,6 +120,10 @@ class App():
     def update_status_menu_item(self):
         self.backupRunning = False
         while True:
+            try:
+                os.chmod('/var/lock/facsimile', stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
+            except:
+                pass
             with open('/var/lock/facsimile', 'w') as lockfile:
                 try:
                     # if facsimile lock file can be locked, a backup is not running

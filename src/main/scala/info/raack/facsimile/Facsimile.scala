@@ -19,11 +19,13 @@
 
 package info.raack.facsimile
 
-import java.io.FileOutputStream
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.FileSystems
+import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.PosixFilePermissions
 import java.time.Instant
 import java.util.HashSet
 
@@ -38,6 +40,7 @@ import com.google.gson.Gson
 class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   val statusPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "status")
+  val lockFilePath = FileSystems.getDefault().getPath("/", "var", "lock", "facsimile")
   val configPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "config")
   val gson = new Gson()
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
@@ -91,7 +94,8 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     Files.write(statusPath, getStatusString(None).getBytes)
     setReadAllPerms(statusPath)
     // check for presence of cron task
-    Option(new FileOutputStream("/var/lock/facsimile").getChannel().tryLock()).map { lock =>
+    createLockFile()
+    Option(FileChannel.open(lockFilePath, StandardOpenOption.WRITE).tryLock()).map { lock =>
       try {
         Backup.process(sourceFilesystem, targetHost, targetFilesystem, config.toMap, printCompletion) match {
           case Success(message) => {
@@ -106,6 +110,19 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
         lock.release()
       }
     }.getOrElse(Failure(new RuntimeException("Could not get lock")))
+  }
+  
+  private def createLockFile(): Unit = {
+    Try {
+      val perms = new HashSet[PosixFilePermission]()
+      perms.add(PosixFilePermission.OWNER_READ)
+      perms.add(PosixFilePermission.OWNER_WRITE)
+      perms.add(PosixFilePermission.GROUP_READ)
+      perms.add(PosixFilePermission.GROUP_WRITE)
+      perms.add(PosixFilePermission.OTHERS_READ)
+      perms.add(PosixFilePermission.OTHERS_WRITE)
+      Files.createFile(lockFilePath, PosixFilePermissions.asFileAttribute(perms))
+    }
   }
 
   def schedule(turnOn: Boolean): Unit = {
