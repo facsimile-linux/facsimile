@@ -35,7 +35,7 @@ class ConfigurationDialog():
     def __init__(self, save_configuration_callback):
         self.reset_on_show = True
         self.save_configuration_callback = save_configuration_callback
-        self.gladefile = "/home/traack/Programming/github/facsimile-linux/facsimile/src/main/glade/facsimile-configuration.glade"  
+        self.gladefile = "/usr/share/facsimile-toolbar/facsimile-configuration.glade"
         self.builder = Gtk.Builder()
         self.builder.add_from_file(self.gladefile)
 
