@@ -251,7 +251,7 @@ object Backup {
     snapshotTimes(tempConfig)
       .sortWith(_.toString < _.toString)
       .map(x => {
-        if (x.isBefore(oneMonthBack)) { monthFormatter.format(x) } else if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }
+        if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }
       })
   }
 
