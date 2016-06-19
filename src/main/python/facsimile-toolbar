@@ -157,7 +157,8 @@ class App():
         
     def lastBackupTime(self):
         try:
-            return json.loads(os.popen("facsimile list-snapshots").read())[-1]
+            snapshots = json.loads(os.popen("facsimile list-snapshots").read())
+            return snapshots[max(snapshots)]
         except:
             return "unknown"
     
