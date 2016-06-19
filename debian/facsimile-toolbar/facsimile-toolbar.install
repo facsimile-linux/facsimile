@@ -2,4 +2,5 @@ src/main/python/facsimile-toolbar usr/bin
 src/main/shell/facsimile-toolbar.desktop etc/xdg/autostart
 src/main/images usr/share/facsimile-toolbar
 src/main/glade/facsimile-configuration.glade usr/share/facsimile-toolbar
+src/main/glade/facsimile-backup-viewer.glade usr/share/facsimile-toolbar
 LICENSE usr/share/facsimile-toolbar

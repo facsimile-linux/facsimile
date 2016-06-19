@@ -235,7 +235,7 @@ object Backup {
     ty + hourFormatter.format(time)
   }
 
-  def snapshots(tempConfig: Map[String, Object]): Seq[String] = {
+  def snapshots(tempConfig: Map[String, Object]): Map[String, String] = {
     val current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
     val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
@@ -250,9 +250,8 @@ object Backup {
 
     snapshotTimes(tempConfig)
       .sortWith(_.toString < _.toString)
-      .map(x => {
-        if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }
-      })
+      .map(x => (x.toString, if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }))
+      .toMap
   }
 
   private def snapshotTimes(tempConfig: Map[String, Object]): Seq[Instant] = {

@@ -73,6 +73,43 @@ class ConfigurationDialog():
     def on_backup_type_changed(self, item):
         print(item)
 
+class SnapshotListBoxRow(Gtk.ListBoxRow):
+    def __init__(self, timestamp, display_text):
+        super(Gtk.ListBoxRow, self).__init__()
+        self.timestamp = timestamp
+        self.display_text = display_text
+        self.add(Gtk.Label(display_text))
+
+class SnapshotViewer():
+
+    def __init__(self):
+        self.gladefile = "/usr/share/facsimile-toolbar/facsimile-backup-viewer.glade"  
+        self.builder = Gtk.Builder()
+        self.builder.add_from_file(self.gladefile)
+
+        self.builder.connect_signals(self)
+    
+        self.window = self.builder.get_object("backup-viewer")
+        self.snapshot_list_box = self.builder.get_object("snapshot-list-box")
+
+    def show(self):
+        th = threading.Thread(target=self.populate_snapshot_list, args=())
+        th.daemon = True
+        th.start()
+        self.window.present()
+        
+    def populate_snapshot_list(self):
+        GLib.idle_add(self.display_snapshots, sorted(json.loads(subprocess.check_output(["facsimile", "list-snapshots"], universal_newlines = True)).items()))
+    
+    def display_snapshots(self, snapshots):
+        for timestamp, display_text in snapshots:
+            self.snapshot_list_box.add(SnapshotListBoxRow(timestamp, display_text))
+
+        self.snapshot_list_box.show_all()
+    
+    def on_snapshot_list_box_row_activated(self, widget, row):
+        print(row.timestamp)
+
 class App():
     def __init__(self):
         self.configuration_dialog = ConfigurationDialog(self.save_configuration)
@@ -83,6 +120,10 @@ class App():
         
         self.menu_item = Gtk.MenuItem("Loading...")
         menu.append(self.menu_item)
+        self.show_snapshots = Gtk.MenuItem("View Backed up files...")
+        menu.append(self.show_snapshots)
+        self.show_snapshots.show()
+        self.show_snapshots.connect('activate', self.open_show_snapshots_window)
         self.config_item = Gtk.MenuItem("Edit Configuration...")
         menu.append(self.config_item)
         self.menu_item.show()
@@ -110,6 +151,9 @@ class App():
         if self.backupRunning:
             return
         self.configuration_dialog.show()
+
+    def open_show_snapshots_window(self, item):
+        SnapshotViewer().show()
         
     def lastBackupTime(self):
         try:

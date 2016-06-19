@@ -111,7 +111,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
       }
     }.getOrElse(Failure(new RuntimeException("Could not get lock")))
   }
-  
+
   private def createLockFile(): Unit = {
     Try {
       val perms = new HashSet[PosixFilePermission]()
@@ -134,7 +134,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     writeConfig()
   }
 
-  def snapshots(): Seq[String] = {
+  def snapshots(): Map[String, String] = {
     Backup.snapshots(config.toMap)
   }
 
@@ -152,7 +152,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     Files.write(configPath, gson.toJson(config.asJava).getBytes)
     setReadAllPerms(configPath)
   }
-  
+
   private def setReadAllPerms(path: Path): Unit = {
     val perms = new HashSet[PosixFilePermission]()
     perms.add(PosixFilePermission.OWNER_READ)
