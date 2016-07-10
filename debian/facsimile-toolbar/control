@@ -8,5 +8,5 @@ Homepage: https://github.com/facsimile-linux/facsimile
 
 Package: facsimile-toolbar
 Architecture: all
-Depends: ${misc:Depends}, facsimile, python-gtk2, python-glade2
+Depends: ${misc:Depends}, facsimile, python-gtk2, python-glade2, python3-simplejson
 Description: Unintrusive, simple snapshot backup system Unity toolbar.

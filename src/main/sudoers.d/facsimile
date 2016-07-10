@@ -1,0 +1,2 @@
+facsimile ALL=(ALL) NOPASSWD: /usr/bin/nice
+%admin ALL=(facsimile) NOPASSWD: /usr/bin/facsimile

@@ -50,7 +50,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   val config: scala.collection.mutable.Map[String, Object] = Try {
     gson.fromJson(new String(Files.readAllBytes(configPath)), classOf[java.util.Map[String, Object]]).asScala
-  }.getOrElse(scala.collection.mutable.Map("schedule-enabled" -> Boolean.box(false)))
+  }.getOrElse(scala.collection.mutable.Map("schedule_enabled" -> Boolean.box(false)))
 
   val lastStartMillis = Try {
     Some(new String(Files.readAllBytes(lastStartTimePath)).toLong)
@@ -127,9 +127,9 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   def schedule(turnOn: Boolean): Unit = {
     if (turnOn) {
-      config.put("schedule-enabled", Boolean.box(true))
+      config.put("schedule_enabled", Boolean.box(true))
     } else {
-      config.put("schedule-enabled", Boolean.box(false))
+      config.put("schedule_enabled", Boolean.box(false))
     }
     writeConfig()
   }
@@ -164,7 +164,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   private def shouldBackup(): Boolean = {
     // don't back up if last backup duration / (now - last backup time start) > 10%
-    val scheduled = config("schedule-enabled") == true
+    val scheduled = config("schedule_enabled") == true
     val overdue = overdueForBackup()
     println(s"scheduled: $scheduled; overdue: $overdue")
     scheduled && overdue

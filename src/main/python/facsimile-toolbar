@@ -21,7 +21,7 @@ from gi.repository import AppIndicator3
 from gi.repository import Gtk, GLib, GObject
 import collections
 import fcntl
-import json
+import simplejson as json
 import os
 import stat
 import subprocess
@@ -56,6 +56,7 @@ class ConfigurationDialog():
         if not error:
             self.close_and_reset()
         else:
+            # TODO - handle this in a better way in the UI
             print(error)
         
     def on_cancel_clicked(self, item):
@@ -143,8 +144,8 @@ class App():
         GLib.MainLoop().run()
         
     def save_configuration(self, configuration):
-        with subprocess.Popen(["facsimile", "set-configuration"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as proc:
-            (stdout_data, stderr_data) = proc.communicate("test data")
+        with subprocess.Popen(["sudo", "-u", "facsimile", "facsimile", "set-configuration"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as proc:
+            (stdout_data, stderr_data) = proc.communicate(json.dumps(configuration))
             return None if proc.returncode == 0 else "%s %s" % (stdout_data, stderr_data)
     
     def open_configuration_window(self, item):

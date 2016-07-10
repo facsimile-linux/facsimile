@@ -148,7 +148,7 @@ object Backup {
         // ssh-keyscan -H 192.168.147.30 >> /var/lib/facsimile/.ssh/known_hosts
         // ssh-keyscan -H transmission >> /var/lib/facsimile/.ssh/known_hosts
         // and then unique the ~/.ssh/known_hosts file
-        val remoteHostDestination = s"${tempConfig("remote-host-user")}@${tempConfig("remote-host")}:${tempConfig("remote-host-path")}"
+        val remoteHostDestination = s"${tempConfig("remote_host_user")}@${tempConfig("remote_host")}:${tempConfig("remote_host_path")}"
         val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $remoteHostDestination/"""
 
         println(command)
@@ -211,7 +211,7 @@ object Backup {
             println(s"total transferred: $completed; total rsync said would be transferred: $totalFiles")
             // snapshot
             val snapshotInstant = Instant.now()
-            val command2 = s"ssh ${tempConfig("remote-host-user")}@${tempConfig("remote-host")} zfs snapshot ${tempConfig("dataset")}@facsimile-${snapshotInstant.toString}"
+            val command2 = s"ssh ${tempConfig("remote_host_user")}@${tempConfig("remote_host")} zfs snapshot ${tempConfig("dataset")}@facsimile-${snapshotInstant.toString}"
             println(command2)
             val output2 = command2 !!
 
@@ -257,7 +257,7 @@ object Backup {
   private def snapshotTimes(tempConfig: Map[String, Object]): Seq[Instant] = {
     val dataset = tempConfig("dataset")
     val length = (dataset + "@facsimile-").length
-    val output: String = s"ssh ${tempConfig("remote-host-user")}@${tempConfig("remote-host")} zfs list -t snapshot -r $dataset" !!
+    val output: String = s"ssh ${tempConfig("remote_host_user")}@${tempConfig("remote_host")} zfs list -t snapshot -r $dataset" !!
 
     var current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
@@ -298,7 +298,7 @@ object Backup {
           }
 
           if (set.contains(bucket)) {
-            val command = s"ssh ${tempConfig("remote-host-user")}@${tempConfig("remote-host")} zfs destroy ${tempConfig("dataset")}@facsimile-$snapshotDate"
+            val command = s"ssh ${tempConfig("remote_host_user")}@${tempConfig("remote_host")} zfs destroy ${tempConfig("dataset")}@facsimile-$snapshotDate"
             println(s"deleting snapshot $snapshotDate with $command")
             command !!
           } else {
