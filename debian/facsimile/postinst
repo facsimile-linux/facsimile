@@ -44,6 +44,8 @@ case "$1" in
     chown -R facsimile:facsimile $statedir
     touch /var/log/facsimile.log
     chown facsimile:facsimile /var/log/facsimile.log
+    touch /var/lib/facsimile/autofs
+    chown facsimile:facsimile /var/lib/facsimile/autofs
     touch /var/lock/facsimile
     chmod ugo+w /var/lock/facsimile
     echo '3 * * * * facsimile /usr/bin/facsimile scheduled-backup >> /var/log/facsimile.log 2>&1' > /etc/cron.d/facsimile

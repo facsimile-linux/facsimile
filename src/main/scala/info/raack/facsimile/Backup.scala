@@ -106,7 +106,7 @@ object Backup {
           "*.backup*", "*~", ".dropbox*", "/proc", "/sys",
           "/dev", "/run", "/etc/mtab", "/media", "/net",
           "/var/cache/apt/archives/*.deb", "lost+found/*",
-          "/tmp", "/var/tmp", "/var/backups", ".Private")
+          "/tmp", "/var/tmp", "/var/backups", ".Private", "/facsimile-sshfs")
 
         val customExcludes = Seq("/backup", "/backupmount", "/sshfs", "/var/lib/mlocate/*", ".recoll/xapiandb", ".gconf.old/system/networking/connections", ".local/share/zeitgeist.old")
 

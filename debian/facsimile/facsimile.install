@@ -1,4 +1,5 @@
 target/pack/lib usr/share/facsimile
 src/main/shell/facsimile usr/bin
 LICENSE /usr/share/facsimile
+src/main/autofs/facsimile.autofs etc/auto.master.d
 src/main/sudoers.d/facsimile etc/sudoers.d
