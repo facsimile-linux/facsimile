@@ -47,11 +47,12 @@ class ConfigurationDialog():
         self.window.present()
         
     def on_apply_clicked(self, item):
+        # TODO - don't hard code this config
         error = self.save_configuration_callback(Configuration(
                                                        remote_host = "transmission",
                                                        schedule_enabled = True,
                                                        dataset = "tank/backup/lune-rsnapshot",
-                                                       remote_host_path = "/mnt/tank/backup/lune-rsnapshot/backup/localhost",
+                                                       remote_host_path = "/mnt/tank/backup/lune-rsnapshot",
                                                        remote_host_user = "traack"))
         if not error:
             self.close_and_reset()

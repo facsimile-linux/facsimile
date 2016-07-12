@@ -47,6 +47,7 @@ import com.google.gson.Gson
 object Backup {
 
   val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "total")
+  val tempBackupLogPath = Files.createTempFile("facsimile-log", null)
 
   /*
    * Possible backup commands:
@@ -149,12 +150,11 @@ object Backup {
         // ssh-keyscan -H transmission >> /var/lib/facsimile/.ssh/known_hosts
         // and then unique the ~/.ssh/known_hosts file
         val remoteHostDestination = s"${tempConfig("remote_host_user")}@${tempConfig("remote_host")}:${tempConfig("remote_host_path")}"
-        val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $remoteHostDestination/"""
+        val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded / $remoteHostDestination/backup/"""
 
         println(command)
 
-        // TODO - do something else with this output
-        val fw = new FileWriter("/tmp/backup_output")
+        val fw = new FileWriter(tempBackupLogPath.toFile().getAbsolutePath)
 
         def computePercent(newCompleted: Long, newTotalFiles: Long): Unit = {
           completed = newCompleted
@@ -205,6 +205,12 @@ object Backup {
         backupMessage match {
           case Success(message) => {
             fw.close()
+            
+            val command = s"""sudo nice -n 19 rsync -aHAXvv --inplace --omit-link-times --numeric-ids ${tempBackupLogPath.toFile().getAbsolutePath} $remoteHostDestination/log"""
+
+            println(command)
+            
+            command!
 
             Files.write(totalPath, completed.toString.getBytes)
 
