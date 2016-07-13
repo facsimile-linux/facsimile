@@ -93,12 +93,21 @@ class SnapshotViewer():
     
         self.window = self.builder.get_object("backup-viewer")
         self.snapshot_list_box = self.builder.get_object("snapshot-list-box")
+        self.file_chooser_widget = self.builder.get_object("file-chooser-widget")
 
     def show(self):
         th = threading.Thread(target=self.populate_snapshot_list, args=())
         th.daemon = True
         th.start()
+        GLib.idle_add(self.change_to_backup_directory, None)
         self.window.present()
+       
+    def change_to_backup_directory(self, timestamp = None):
+        if not timestamp:
+            self.file_chooser_widget.set_filename('/facsimile-sshfs/backup/backup/dummy')
+        else:
+            dir = '/facsimile-sshfs/backup/.zfs/snapshot/facsimile-' + timestamp + '/backup/dummy'
+            self.file_chooser_widget.set_filename(dir)
         
     def populate_snapshot_list(self):
         GLib.idle_add(self.display_snapshots, sorted(json.loads(subprocess.check_output(["facsimile", "list-snapshots"], universal_newlines = True)).items()))
@@ -110,7 +119,7 @@ class SnapshotViewer():
         self.snapshot_list_box.show_all()
     
     def on_snapshot_list_box_row_activated(self, widget, row):
-        print(row.timestamp)
+        self.change_to_backup_directory(row.timestamp)
 
 class App():
     def __init__(self):
