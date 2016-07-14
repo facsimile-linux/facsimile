@@ -157,6 +157,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   
   private def writeAutoFs(config: Map[String, Object]): Unit = {
     // TODO - update to the actual backup path used
+    // TODO - fix security hole which allows user one to view user two's protected files through backup
     val remoteHostDestination = s"${config("remote_host_user")}@${config("remote_host")}\\:${config("remote_host_path")}"
     Files.write(autoFsPath, s"backup  -fstype=fuse,rw,idmap=user,allow_other,IdentityFile=/home/traack/.ssh/id_rsa :sshfs\\#traack@transmission\\:/mnt/tank/backup/lune-rsnapshot".getBytes)
   }
