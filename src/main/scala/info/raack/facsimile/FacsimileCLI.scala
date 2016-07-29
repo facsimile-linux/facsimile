@@ -26,7 +26,10 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
-import com.google.gson.Gson
+import org.json4s.NoTypeHints
+import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jackson.Serialization
+import org.json4s.jackson.Serialization.write
 
 object FacsimileCLI extends App {
 
@@ -42,14 +45,15 @@ object FacsimileCLI extends App {
   }
 
   private def process(command: String): Option[Int] = {
+    implicit val formats = Serialization.formats(NoTypeHints)
     command match {
       case "scheduled-backup" => handleBackupOutput(new Facsimile().scheduledBackup())
       case "schedule-on" => { new Facsimile().schedule(true); None }
       case "schedule-off" => { new Facsimile().schedule(false); None }
       case "backup" => handleBackupOutput(new Facsimile().backup())
-      case "list-snapshots" => { println(new Gson().toJson(new Facsimile().snapshots().asJava)); None }
-      case "get-configuration" => { println(new Gson().toJson(new Facsimile().configuration().asJava)); None }
-      case "set-configuration" => { new Facsimile().configuration(new Gson().fromJson(Source.stdin.getLines.mkString(""), classOf[java.util.Map[String, Object]]).asScala.toMap); None }
+      case "list-snapshots" => { println(write(new Facsimile().snapshots())); None }
+      case "get-configuration" => { println(write(new Facsimile().configuration())); None }
+      case "set-configuration" => { new Facsimile().configuration(parse(Source.stdin.getLines.mkString("")).extract[Configuration]); None }
       case "help" => { println(help); None }
       case "exit" => Some(0)
       case other => { println(s"$other is not a valid command.\n${help}"); None }

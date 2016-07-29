@@ -19,4 +19,8 @@
 
 package info.raack.facsimile
 
-case class Configuration()
+case class Configuration(var automaticBackups: Boolean, remoteConfiguration: RemoteConfiguration, configurationType: String)
+
+case class RemoteConfiguration(host: String, user: String, path: String)
+
+case class LocalConfiguration()

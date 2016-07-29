@@ -35,7 +35,10 @@ import scala.util.Try
 import scala.collection.JavaConverters.mapAsJavaMapConverter
 import scala.collection.JavaConverters.mapAsScalaMapConverter
 
-import com.google.gson.Gson
+import org.json4s.{DefaultFormats, NoTypeHints}
+import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jackson.Serialization
+import org.json4s.jackson.Serialization.write
 
 class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
@@ -43,15 +46,15 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   val lockFilePath = FileSystems.getDefault().getPath("/", "var", "lock", "facsimile")
   val configPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "config")
   val autoFsPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "autofs")
-  val gson = new Gson()
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
   val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
 
-  val config: scala.collection.mutable.Map[String, Object] = Try {
-    gson.fromJson(new String(Files.readAllBytes(configPath)), classOf[java.util.Map[String, Object]]).asScala
-  }.getOrElse(scala.collection.mutable.Map("schedule_enabled" -> Boolean.box(false)))
+  var config: Configuration = Try {
+    implicit val formats = DefaultFormats
+    parse(new String(Files.readAllBytes(configPath))).extract[Configuration]
+  }.getOrElse(Configuration(automaticBackups = false, configurationType = "remote", remoteConfiguration = RemoteConfiguration(host = "", user = "", path = "")))
 
   val lastStartMillis = Try {
     Some(new String(Files.readAllBytes(lastStartTimePath)).toLong)
@@ -79,7 +82,8 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   }
 
   private def getStatusString(minutesToCompleteOption: Option[Long]): String = {
-    gson.toJson(Map("time_remaining" -> minutesToCompleteOption.getOrElse("unknown")).asJava)
+    implicit val formats = Serialization.formats(NoTypeHints)
+    write(Map("time_remaining" -> minutesToCompleteOption.getOrElse("unknown")))
   }
 
   def scheduledBackup(): Try[String] = {
@@ -98,10 +102,11 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     createLockFile()
     Option(FileChannel.open(lockFilePath, StandardOpenOption.WRITE).tryLock()).map { lock =>
       try {
-        Backup.process(sourceFilesystem, targetHost, targetFilesystem, config.toMap, printCompletion) match {
+        Backup.process(sourceFilesystem, targetHost, targetFilesystem, config, printCompletion) match {
           case Success(message) => {
             val endTime = System.currentTimeMillis()
             Files.write(lastStartTimePath, startTime.toString.getBytes)
+            setReadAllPerms(lastStartTimePath)
             Files.write(totalTimePath, (endTime - startTime).toString.getBytes)
             Success(message)
           }
@@ -127,39 +132,35 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   }
 
   def schedule(turnOn: Boolean): Unit = {
-    if (turnOn) {
-      config.put("schedule_enabled", Boolean.box(true))
-    } else {
-      config.put("schedule_enabled", Boolean.box(false))
-    }
+    config.automaticBackups = turnOn
     writeConfig()
   }
 
   def snapshots(): Map[String, String] = {
-    Backup.snapshots(config.toMap)
+    Backup.snapshots(config)
   }
 
-  def configuration(): Map[String, Object] = {
-    config.toMap
+  def configuration(): Configuration = {
+    config
   }
 
-  def configuration(newConfig: Map[String, Object]): Unit = {
-    config.clear()
-    config ++= newConfig
+  def configuration(newConfig: Configuration): Unit = {
+    config = newConfig
     writeConfig()
     writeAutoFs(newConfig)
   }
 
   private def writeConfig(): Unit = {
-    Files.write(configPath, gson.toJson(config.asJava).getBytes)
+    implicit val formats = Serialization.formats(NoTypeHints)
+    Files.write(configPath, write(config).getBytes)
     setReadAllPerms(configPath)
   }
-  
-  private def writeAutoFs(config: Map[String, Object]): Unit = {
+
+  private def writeAutoFs(config: Configuration): Unit = {
     // TODO - update to the actual backup path used
     // TODO - fix security hole which allows user one to view user two's protected files through backup
-    val remoteHostDestination = s"${config("remote_host_user")}@${config("remote_host")}\\:${config("remote_host_path")}"
-    Files.write(autoFsPath, s"backup  -fstype=fuse,rw,idmap=user,allow_other,IdentityFile=/home/traack/.ssh/id_rsa :sshfs\\#traack@transmission\\:/mnt/tank/backup/lune-rsnapshot".getBytes)
+    val remoteHostDestination = s"${config.remoteConfiguration.user}@${config.remoteConfiguration.host}\\:${config.remoteConfiguration.path}"
+    Files.write(autoFsPath, "backup  -fstype=fuse,rw,idmap=user,allow_other,IdentityFile=/home/traack/.ssh/id_rsa :sshfs\\#traack@transmission\\:/mnt/tank/backup/lune-rsnapshot".getBytes)
   }
 
   private def setReadAllPerms(path: Path): Unit = {
@@ -173,7 +174,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   private def shouldBackup(): Boolean = {
     // don't back up if last backup duration / (now - last backup time start) > 10%
-    val scheduled = config("schedule_enabled") == true
+    val scheduled = config.automaticBackups
     val overdue = overdueForBackup()
     println(s"scheduled: $scheduled; overdue: $overdue")
     scheduled && overdue
