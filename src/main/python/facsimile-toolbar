@@ -44,6 +44,7 @@ class ConfigurationDialog():
         self.builder.connect_signals(self)
     
         self.window = self.builder.get_object("configuration")
+        self.backup_type = self.builder.get_object("backup_type")
         self.local_box = self.builder.get_object("local_box")
         self.remote_box = self.builder.get_object("remote_box")
         
@@ -66,6 +67,8 @@ class ConfigurationDialog():
 
         local_configuration = configuration.get("localConfiguration", {})
 
+        self.backup_type.set_active([row[0] for row in self.backup_type.get_model()].index(configuration.get("configurationType").title()))
+
         self.window.present()
     
     def on_private_key_chooser_file_set(self, file_set):
@@ -82,7 +85,7 @@ class ConfigurationDialog():
                                   private_key_saved = True,
                                   path = self.path.get_text()),
                               automaticBackups = self.automatic_backups.get_active(),
-                              configurationType = "local" if False else "remote")):
+                              configurationType = "local" if self.backup_type.get_model()[self.backup_type.get_active_iter()][0] == 'Local' else "remote")):
             self.close_and_reset()
         else:
             # TODO - handle this in a better way in the UI
