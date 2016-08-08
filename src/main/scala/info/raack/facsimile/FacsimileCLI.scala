@@ -33,7 +33,7 @@ import org.json4s.jackson.Serialization.write
 
 object FacsimileCLI extends App {
 
-  // TODO - make sure that facsimile-toolbar.desktop is installed in /etc/xdg/autostart
+  val facsimile = new Facsimile()
 
   args.headOption.map(process(_).getOrElse(0)).getOrElse({
     // wait for commands
@@ -46,14 +46,16 @@ object FacsimileCLI extends App {
 
   private def process(command: String): Option[Int] = {
     implicit val formats = Serialization.formats(NoTypeHints)
+    val listSnapshotFiles = """list-snapshot-files\s+(\S+)\s+(\S+)""".r
     command match {
-      case "scheduled-backup" => handleBackupOutput(new Facsimile().scheduledBackup())
-      case "schedule-on" => { new Facsimile().schedule(true); None }
-      case "schedule-off" => { new Facsimile().schedule(false); None }
-      case "backup" => handleBackupOutput(new Facsimile().backup())
-      case "list-snapshots" => { println(write(new Facsimile().snapshots())); None }
-      case "get-configuration" => { println(write(new Facsimile().configuration())); None }
-      case "set-configuration" => { new Facsimile().configuration(parse(Source.stdin.getLines.mkString("")).extract[Configuration]); None }
+      case "scheduled-backup" => handleBackupOutput(facsimile.scheduledBackup())
+      case "schedule-on" => { facsimile.schedule(true); None }
+      case "schedule-off" => { facsimile.schedule(false); None }
+      case "backup" => handleBackupOutput(facsimile.backup())
+      case "list-snapshots" => { println(write(facsimile.snapshots())); None }
+      case listSnapshotFiles(snapshot, dir) => { println(write(facsimile.getSnapshotFiles(snapshot, dir))); None }
+      case "get-configuration" => { println(write(facsimile.configuration())); None }
+      case "set-configuration" => { facsimile.configuration(parse(Source.stdin.getLines.mkString("")).extract[Configuration]); None }
       case "help" => { println(help); None }
       case "exit" => Some(0)
       case other => { println(s"$other is not a valid command.\n${help}"); None }

@@ -401,4 +401,33 @@ object Backup {
       ""
     }
   }
+
+  def getSnapshotFiles(snapshot: String, directory: String, tempConfig: Configuration): Seq[SnapshotFile] = {
+    var fileList = false
+    val startLine = """\[(R)eceiver\]\sflist\sstart.*""".r
+    val endLine = """(r)ecv_file_list\sdone""".r
+    val fileLine = """\[Receiver\]\si=\d+\s\d\s(.+)\smode=(\d+)\slen=(\S+)\suid=(\d+)\sgid=(\d+)\sflags=(\d+)""".r
+
+    val items = Try {
+      val actualDirectory = Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $directory").lineStream.mkString("")
+      Process(s"sudo nice -n 19 rsync --dry-run -lptgoDHAXvvvv --dirs -M--fake-super --numeric-ids ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host}:${tempConfig.remoteConfiguration.path}/.zfs/snapshot/facsimile-$snapshot/backup/$actualDirectory/ /tmp/Desktop/").
+        // TODO - do not ignore errors
+        lineStream(ProcessLogger(_ => {})).flatMap { line =>
+          line match {
+            case startLine(x) if !fileList => { fileList = true; None }
+            case endLine(x) if fileList => { fileList = false; None }
+            case fileLine(name, mode, len, uid, gid, flags) if fileList => Some(SnapshotFile(name, uid.replace(",", "").toInt, Some(1234), false))
+            case _ => None
+          }
+        }
+    } match {
+      case Success(x) => x
+      case Failure(e) => Seq()
+    }
+
+    items.par.map { file =>
+      file.copy(name = Process(s"sudo encfsctl decode --extpass='/usr/share/facsimile/facsimile-password' -- / ${file.name}").
+        lineStream.mkString(""))
+    }.seq
+  }
 }

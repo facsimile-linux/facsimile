@@ -150,6 +150,10 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     writeAutoFs(newConfig)
   }
 
+  def getSnapshotFiles(snapshot: String, directory: String): Seq[SnapshotFile] = {
+    Backup.getSnapshotFiles(snapshot, directory, config)
+  }
+
   private def writeConfig(): Unit = {
     implicit val formats = Serialization.formats(NoTypeHints)
     Files.write(configPath, write(config).getBytes)
