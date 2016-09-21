@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+cat /.encfs6.xml | \
+tr '\n' '\r' | \
+sed 's/<nameAlg>.*<\/nameAlg>/<nameAlg>\r                <name>nameio\/stream<\/name>\r                <major>2<\/major>\r                <minor>1<\/minor>\r        <\/nameAlg>/g' | \
+tr '\r' '\n' > \
+/tmp/.encfs6.xml.new
+
+mv /tmp/.encfs6.xml.new /.encfs6.xml

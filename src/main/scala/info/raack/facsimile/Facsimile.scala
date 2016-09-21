@@ -86,7 +86,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     write(Map("time_remaining" -> minutesToCompleteOption.getOrElse("unknown")))
   }
 
-  def scheduledBackup(): Try[String] = {
+  def scheduledBackup(): Try[Unit] = {
     println(s"Starting up at ${Instant.now()}")
     if (shouldBackup()) {
       backup()
@@ -95,22 +95,19 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     }
   }
 
-  def backup(): Try[String] = {
+  def backup(): Try[Unit] = {
     Files.write(statusPath, getStatusString(None).getBytes)
     setReadAllPerms(statusPath)
     // check for presence of cron task
     createLockFile()
     Option(FileChannel.open(lockFilePath, StandardOpenOption.WRITE).tryLock()).map { lock =>
       try {
-        Backup.process(sourceFilesystem, targetHost, targetFilesystem, config, printCompletion) match {
-          case Success(message) => {
-            val endTime = System.currentTimeMillis()
-            Files.write(lastStartTimePath, startTime.toString.getBytes)
-            setReadAllPerms(lastStartTimePath)
-            Files.write(totalTimePath, (endTime - startTime).toString.getBytes)
-            Success(message)
-          }
-          case other => other
+        Backup.process(sourceFilesystem, targetHost, targetFilesystem, config, printCompletion).map { s =>
+          val endTime = System.currentTimeMillis()
+          Files.write(lastStartTimePath, startTime.toString.getBytes)
+          setReadAllPerms(lastStartTimePath)
+          Files.write(totalTimePath, (endTime - startTime).toString.getBytes)
+          ()
         }
       } finally {
         lock.release()
@@ -152,6 +149,10 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
 
   def getSnapshotFiles(snapshot: String, directory: String): Seq[SnapshotFile] = {
     Backup.getSnapshotFiles(snapshot, directory, config)
+  }
+
+  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Unit = {
+    Backup.restoreSnapshotFiles(snapshot, backupPath, restorePath)
   }
 
   private def writeConfig(): Unit = {

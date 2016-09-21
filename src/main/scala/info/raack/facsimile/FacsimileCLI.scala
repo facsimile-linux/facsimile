@@ -62,9 +62,9 @@ object FacsimileCLI extends App {
     }
   }
 
-  private def handleBackupOutput(output: Try[String]): Option[Int] = {
+  private def handleBackupOutput(output: Try[Unit]): Option[Int] = {
     output match {
-      case Success(message) => { println(s"Succeeded with message: $message"); None }
+      case Success(x) => { println(s"Succeeded."); None }
       case Failure(e) => { println(s"Could not backup: ${e.getMessage}"); None }
     }
   }

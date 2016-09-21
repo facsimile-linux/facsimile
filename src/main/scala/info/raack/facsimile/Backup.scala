@@ -19,6 +19,7 @@
 
 package info.raack.facsimile
 
+import java.io.File
 import java.io.FileWriter
 import java.nio.file.Files
 import java.nio.file.Path
@@ -80,7 +81,7 @@ object Backup {
    */
 
   // TODO - allow status callbacks so CLI can have information and print it there
-  def process(source: Filesystem, target: Host, destination: Filesystem, tempConfig: Configuration, progressNotifier: (Int) => Unit): Try[String] = {
+  def process(source: Filesystem, target: Host, destination: Filesystem, tempConfig: Configuration, progressNotifier: (Int) => Unit): Try[Unit] = {
 
     (source, destination) match {
       case (s: PipedTransferSupported, d: PipedTransferSupported) if s.pipedTransferType == d.pipedTransferType => {
@@ -102,7 +103,7 @@ object Backup {
         // backup
 
         val defaultExcludes = Seq("/proc", "/sys", "/tmp/encryptedbackup",
-          "/dev", "/run", "/etc/mtab", "/media", "/net",
+          "/dev", "/run", "/etc/mtab", "/media", "/net", "/home/.ecryptfs",
           "/var/cache/apt/archives", "/lost+found",
           "/tmp", "/var/tmp", "/var/backups", "/facsimile-sshfs")
 
@@ -111,7 +112,6 @@ object Backup {
 
         val customExcludes = Seq("/backup", "/backupmount", "/sshfs", "/var/lib/mlocate", "/home/traack/.recoll/xapiandb", "/home/traack/.gconf.old/system/networking/connections", "/home/traack/.local/share/zeitgeist.old")
 
-        val path = Files.createTempFile("facsimile", "config")
         val absoluteHomeExcludes: Seq[String] = Process("cut -d: -f6,7 /etc/passwd").lineStream.
           map(_.split(":")).
           filter(tuple => !Seq("/bin/false", "/usr/sbin/nologin", "/bin/sync").contains(tuple(1))).
@@ -119,30 +119,6 @@ object Backup {
           flatMap(homedir => defaultHomeExcludes.map(exclude => s"$homedir/$exclude"))
         val allExcludes = (absoluteHomeExcludes ++ defaultExcludes ++ customExcludes)
 
-        var totalFiles: Long = Try {
-          // try to read file total from previous file total
-          new String(Files.readAllBytes(totalPath)).toLong
-        }.getOrElse({
-          // find number of inodes on system to estimate total number of files
-          val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
-          Process("/bin/df --output=target,fstype,iused").lineStream
-            .flatMap({ case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
-            .filterNot(item => allExcludes.contains(item._1))
-            .filterNot(item => Seq("ecryptfs").contains(item._2))
-            .map(_._3)
-            .sum
-        })
-
-        var completed: Long = 0
-        var latestPercent: Int = 0
-
-        val incrementalPattern = """.*(ir-chk)=.*""".r
-        val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
-        val uptodate = """.*(uptodate).*""".r
-        val hidingfile = """.*(hiding file).*""".r
-        val rsyncMessage = """rsync:\s(.*)""".r
-
-        println(s"total files to transfer: $totalFiles")
         progressNotifier(0)
         // -M--fake-super to write user / group information into xattrs
         // --inplace to not re-write destination file (preserves bits for destination COW)
@@ -152,141 +128,30 @@ object Backup {
         // ssh-keyscan -H transmission >> /var/lib/facsimile/.ssh/known_hosts
         // and then unique the ~/.ssh/known_hosts file
         val remoteHostDestination = s"${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host}:${tempConfig.remoteConfiguration.path}"
-        val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${path.toFile.toString} --numeric-ids --delete-excluded /tmp/encryptedbackup/ $remoteHostDestination/backup/"""
 
-        println(command)
+        val initialMessage = mountEncFsForBackup("/", "/tmp/encryptedbackup")
 
-        val fw = new FileWriter(tempBackupLogPath.toFile().getAbsolutePath)
-
-        def computePercent(newCompleted: Long, newTotalFiles: Long): Unit = {
-          completed = newCompleted
-          totalFiles = newTotalFiles
-
-          // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
-
-          val percent = if (totalFiles > 0) (100 * completed / totalFiles).toInt else 0
-
-          if (percent != latestPercent) {
-            latestPercent = percent
-            progressNotifier(latestPercent)
-          }
+        val backupMessage = initialMessage.flatMap { s =>
+          copy("/tmp/encryptedbackup", remoteHostDestination, allExcludes, progressNotifier)
         }
 
-        val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
-        val initialMessages = scala.collection.mutable.ArrayBuffer.empty[String]
-
-        val initialMessage = Try {
-          // TODO - get password from user
-          // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK
-          // ONLY USE IT TEMPORARILY ONCE WHEN ENCFS CONFIG FILE IS MISSING
-          (Process("sudo mkdir -p /tmp/encryptedbackup") #&&
-            Process("cat /var/lib/facsimile/password") #|
-            Process("sudo encfs --standard --stdinpass --reverse -o ro / /tmp/encryptedbackup")).
-            lineStream(ProcessLogger(line => { initialMessages += line })).
-            foreach(line => { initialMessages += line })
-        } match {
-          case Failure(e) => {
-            val errorRegex = """Nonzero exit code: (\d+)""".r
-            e.getMessage match {
-              case errorRegex(code) => {
-                code.toInt match {
-                  case other => Failure(new RuntimeException(s"Encfs mount error code $other: \n${initialMessages.mkString("\n")}")) // non fatal
-                }
-              }
-              case other => Failure(new RuntimeException(s"Encfs mount error:\n${initialMessages.mkString("\n")}"))
-            }
-          }
-          case other => Success("")
+        val copyEncryptedConfigurationMessage = backupMessage.flatMap { s =>
+          runRemoteCommand(s"sudo nice -n 19 rsync -aHAXvv /.encfs6.xml $remoteHostDestination/encfs_config", "Could not copy encfs configuration file")
         }
 
-        val excludeMessage = initialMessage match {
-          case Success(message) => {
-            Try {
-              val encryptedExcludes = allExcludes.par.flatMap(exclude => Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' / $exclude").lineStream)
-              Files.write(path, encryptedExcludes.mkString("\n").getBytes)
-            } match {
-              case Failure(e) => {
-                val errorRegex = """Nonzero exit code: (\d+)""".r
-                e.getMessage match {
-                  case errorRegex(code) => {
-                    code.toInt match {
-                      case other => Failure(new RuntimeException(s"Encode filename error code $other")) // non fatal
-                    }
-                  }
-                  case other => Failure(new RuntimeException(s"Backup error:\n${rsyncMessages.mkString("\n")}"))
-                }
-              }
-              case other => Success("")
-            }
-          }
-          case e => e
+        val logCopyMessage = copyEncryptedConfigurationMessage.flatMap { s =>
+          // snapshot
+          val snapshotInstant = Instant.now()
+          // TODO - replace hardcoded dataset path with actual dataset path
+          val dataset = "tank/backup/lune-rsnapshot"
+          val command2 = s"ssh ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
+          println(command2)
+          val output2 = command2 !!
+
+          cullSnapshots(snapshotInstant, tempConfig)
         }
 
-        val backupMessage = excludeMessage match {
-          case Success(message) => {
-            Try {
-              // TODO - the rsync process can hang. this should be executed in some other thread and we should watch for log lines.
-              // if there hasn't been some log line in, 5 minutes, kill the rsync process and start again.
-              Process(command).lineStream(ProcessLogger(line => rsyncMessages += line)).foreach(line => {
-                line match {
-                  case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { computePercent(completed + 1, totalFiles) }
-                  case totalPattern(toGo, newTotal) => { computePercent(newTotal.toLong - toGo.toLong, newTotal.toLong) }
-                  case rsyncMessage(message) => { rsyncMessages += message }
-                  case others => { fw.write(others); fw.write("\n") }
-                }
-              })
-            } match {
-              case Failure(e) => {
-                val errorRegex = """Nonzero exit code: (\d+)""".r
-                e.getMessage match {
-                  case errorRegex(code) => {
-                    code.toInt match {
-                      // could not delete all files because of max delete OR
-                      // some files not transfered because they disappeared first - not a problem
-                      case 24 | 25 => Success("")
-                      case 23 => Success(s"Some files not transfered due to an error\n${rsyncMessages.mkString("\n")}")
-                      case other => Failure(new RuntimeException(s"Backup error code $other: \n${rsyncMessages.mkString("\n")}")) // non fatal
-                    }
-                  }
-                  case other => Failure(new RuntimeException(s"Backup error:\n${rsyncMessages.mkString("\n")}"))
-                }
-              }
-              case other => Success("")
-            }
-          }
-          case e => e
-        }
-
-        val copyEncryptedConfigurationMessage = backupMessage match {
-          case Success(message) => runRemoteCommand(s"sudo nice -n 19 rsync -aHAXvv /.encfs6.xml $remoteHostDestination/encfs_config", "Could not copy encfs configuration file")
-          case other => other
-        }
-
-        val logCopyMessage = copyEncryptedConfigurationMessage match {
-          case Success(message) => {
-            fw.close()
-
-            val command = s"""sudo nice -n 19 rsync -aHAXvv --inplace --omit-link-times --numeric-ids ${tempBackupLogPath.toFile().getAbsolutePath} $remoteHostDestination/log"""
-
-            println(command)
-
-            command!
-
-            Files.write(totalPath, completed.toString.getBytes)
-
-            println(s"total transferred: $completed; total rsync said would be transferred: $totalFiles")
-            // snapshot
-            val snapshotInstant = Instant.now()
-            // TODO - replace hardcoded dataset path with actual dataset path
-            val dataset = "tank/backup/lune-rsnapshot"
-            val command2 = s"ssh ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
-            println(command2)
-            val output2 = command2 !!
-
-            cullSnapshots(snapshotInstant, tempConfig)
-          }
-          case e => e
-        }
+        Files.delete(tempBackupLogPath)
 
         runRemoteCommand("sudo fusermount -u /tmp/encryptedbackup", "Could not unmount encrypted directory") match {
           case Failure(e) => println(e)
@@ -298,21 +163,158 @@ object Backup {
     }
   }
 
-  private def runRemoteCommand(command: String, errorString: String): Try[String] = {
+  private def mountEncFsForBackup(source: String, destination: String): Try[Unit] = {
+    mountEncFs(source, destination, "--reverse -o ro")
+  }
+
+  private def mountEncFsForRestore(source: String, destination: String): Try[Unit] = {
+    mountEncFs(source, destination, "")
+  }
+
+  private def mountEncFs(source: String, destination: String, extraOptions: String): Try[Unit] = {
+    val initialMessages = scala.collection.mutable.ArrayBuffer.empty[String]
+    Try {
+      // TODO - get password from user
+      // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK
+      // ONLY USE IT TEMPORARILY ONCE WHEN ENCFS CONFIG FILE IS MISSING
+      (Process(s"sudo mkdir -p $destination") #&&
+        Process("cat /var/lib/facsimile/password") #|
+        Process(s"sudo encfs --standard --stdinpass $extraOptions $source $destination") //#&&
+        //Process("sudo fusermount -u /tmp/encryptedbackup") #&&
+        //Process("sudo /usr/share/facsimile/set-encfs-to-stream-names") #&&
+        //Process("cat /var/lib/facsimile/password") #|
+        //Process("sudo encfs --standard --stdinpass --reverse -o ro / /tmp/encryptedbackup")
+        ).
+        lineStream(ProcessLogger(line => { initialMessages += line })).
+        foreach(line => { initialMessages += line })
+    }.recoverWith {
+      case ex =>
+        val errorRegex = """Nonzero exit code: (\d+)""".r
+        ex.getMessage match {
+          case errorRegex(code) => {
+            code.toInt match {
+              case other => Failure(new RuntimeException(s"Encfs mount error code $other: \n${initialMessages.mkString("\n")}")) // non fatal
+            }
+          }
+          case other => Failure(new RuntimeException(s"Encfs mount error:\n${initialMessages.mkString("\n")}"))
+        }
+    }
+  }
+
+  private def copy(source: String, destination: String, allExcludes: Seq[String], progressNotifier: (Int) => Unit): Try[Unit] = {
+    val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
+
+    val incrementalPattern = """.*(ir-chk)=.*""".r
+    val totalPattern = """.*to-chk=(\d+)\/(\d+).*""".r
+    val uptodate = """.*(uptodate).*""".r
+    val hidingfile = """.*(hiding file).*""".r
+    val rsyncMessage = """rsync:\s(.*)""".r
+    val excludeFilesPath = Files.createTempFile("facsimile", "config")
+
+    val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${excludeFilesPath.toFile.toString} --numeric-ids --delete-excluded $source/ $destination/backup/"""
+
+    var completed: Long = 0
+    var latestPercent: Int = 0
+    var totalFiles: Long = Try {
+      // try to read file total from previous file total
+      new String(Files.readAllBytes(totalPath)).toLong
+    }.getOrElse({
+      // find number of inodes on system to estimate total number of files
+      val pattern = """(\S+)\s+(\S+)\s+(\d+)""".r
+      Process("/bin/df --output=target,fstype,iused").lineStream
+        .flatMap({ case pattern(target, fstype, iused) => Some((target, fstype, iused.toLong)); case _ => None })
+        .filterNot(item => allExcludes.contains(item._1))
+        .filterNot(item => Seq("ecryptfs").contains(item._2))
+        .map(_._3)
+        .sum
+    })
+
+    def computePercent(newCompleted: Long, newTotalFiles: Long): Unit = {
+      completed = newCompleted
+      totalFiles = newTotalFiles
+
+      // TODO - percentage complete may not actually be accurate - need to verify that #completed accounting is actually correct
+
+      val percent = if (totalFiles > 0) (100 * completed / totalFiles).toInt else 0
+
+      if (percent != latestPercent) {
+        latestPercent = percent
+        progressNotifier(latestPercent)
+      }
+    }
+
+    val fw = new FileWriter(tempBackupLogPath.toFile().getAbsolutePath)
+
+    val excludeMessage = Try {
+      val encryptedExcludes = allExcludes.par.flatMap(exclude => Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' / $exclude").lineStream)
+      Files.write(excludeFilesPath, encryptedExcludes.mkString("\n").getBytes)
+    }.recoverWith {
+      case e =>
+        val errorRegex = """Nonzero exit code: (\d+)""".r
+        e.getMessage match {
+          case errorRegex(code) => {
+            code.toInt match {
+              case other => Failure(new RuntimeException(s"Encode filename error code $other")) // non fatal
+            }
+          }
+          case other => Failure(new RuntimeException(s"Unknown encfs error:\n${e.getMessage}"))
+        }
+    }
+    excludeMessage.flatMap { s =>
+      Try {
+        // TODO - the rsync process can hang. this should be executed in some other thread and we should watch for log lines.
+        // if there hasn't been some log line in, 5 minutes, kill the rsync process and start again.
+        try {
+          Process(command).lineStream(ProcessLogger(line => rsyncMessages += line)).foreach(line => {
+            line match {
+              case incremental @ (uptodate(_) | hidingfile(_) | incrementalPattern(_)) => { computePercent(completed + 1, totalFiles) }
+              case totalPattern(toGo, newTotal) => { computePercent(newTotal.toLong - toGo.toLong, newTotal.toLong) }
+              case rsyncMessage(message) => { rsyncMessages += message }
+              case others => { fw.write(others); fw.write("\n") }
+            }
+          })
+        } finally {
+          fw.close()
+        }
+      }.recoverWith {
+        case e =>
+          val errorRegex = """Nonzero exit code: (\d+)""".r
+          e.getMessage match {
+            case errorRegex(code) => {
+              code.toInt match {
+                // could not delete all files because of max delete OR
+                // some files not transfered because they disappeared first - not a problem
+                case 24 | 25 => Success("")
+                case 23 => Success(s"Some files not transfered due to an error\n${rsyncMessages.mkString("\n")}")
+                case other => Failure(new RuntimeException(s"Backup error code $other: \n${rsyncMessages.mkString("\n")}")) // non fatal
+              }
+            }
+            case other => Failure(new RuntimeException(s"Backup error:\n${rsyncMessages.mkString("\n")}"))
+          }
+      }.flatMap { s =>
+        Try {
+          Files.write(totalPath, completed.toString.getBytes)
+
+          val command = s"""sudo nice -n 19 rsync -aHAXvv --inplace --omit-link-times --numeric-ids ${tempBackupLogPath.toFile().getAbsolutePath} $destination/log"""
+
+          println(command)
+
+          command!
+        }
+      }
+    }
+  }
+
+  private def runRemoteCommand(command: String, errorString: String): Try[Unit] = {
     runRemoteProcess(Process(command), errorString)
   }
 
-  private def runRemoteProcess(processBuilder: scala.sys.process.ProcessBuilder, errorString: String): Try[String] = {
+  private def runRemoteProcess(processBuilder: scala.sys.process.ProcessBuilder, errorString: String): Try[Unit] = {
     val commandOutput = scala.collection.mutable.ArrayBuffer.empty[String]
 
     Try {
       processBuilder.lineStream(ProcessLogger(commandOutput += _)).foreach(commandOutput += _)
-    } match {
-      case Failure(e) => {
-        Failure(new RuntimeException(s"$errorString; ${commandOutput.mkString("\n")}"))
-      }
-      case other => Success("")
-    }
+    }.recoverWith { case e => Failure(new RuntimeException(s"$errorString; ${commandOutput.mkString("\n")}")) }
   }
 
   private def formatHour(time: Instant): String = {
@@ -357,7 +359,7 @@ object Backup {
       .flatMap { str => Try { Instant.parse(str.substring(length, length + 24)) }.toOption }
   }
 
-  private def cullSnapshots(currentSnapshot: Instant, tempConfig: Configuration): Try[String] = {
+  private def cullSnapshots(currentSnapshot: Instant, tempConfig: Configuration): Try[Unit] = {
     Try {
       // keep all hourly snapshots for last 24 hours
       // keep all daily backups for the last month
@@ -398,7 +400,6 @@ object Backup {
             set += bucket
           }
         })
-      ""
     }
   }
 
@@ -429,5 +430,14 @@ object Backup {
       file.copy(name = Process(s"sudo encfsctl decode --extpass='/usr/share/facsimile/facsimile-password' -- / ${file.name}").
         lineStream.mkString(""))
     }.seq
+  }
+
+  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Unit = {
+    // 1) TODO - verify that restorePath does not exist
+    // 2) create restorePath as a directory
+    // 3) enfs mount from a new temp directory to restorePath
+    // 4) rsync
+
+    // TODO - if restoring full system, make sure root of destination is mounted elsewhere on FS, not root
   }
 }
