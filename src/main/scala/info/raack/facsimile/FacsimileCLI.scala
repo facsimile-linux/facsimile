@@ -47,6 +47,7 @@ object FacsimileCLI extends App {
   private def process(command: String): Option[Int] = {
     implicit val formats = Serialization.formats(NoTypeHints)
     val listSnapshotFiles = """list-snapshot-files\s+(\S+)\s+(\S+)""".r
+    val restoreSnapshotFiles = """restore-snapshot-files\s+(\S+)\s+(\S+)\s+(\S+)""".r
     command match {
       case "scheduled-backup" => handleBackupOutput(facsimile.scheduledBackup())
       case "schedule-on" => { facsimile.schedule(true); None }
@@ -54,6 +55,7 @@ object FacsimileCLI extends App {
       case "backup" => handleBackupOutput(facsimile.backup())
       case "list-snapshots" => { println(write(facsimile.snapshots())); None }
       case listSnapshotFiles(snapshot, dir) => { println(write(facsimile.getSnapshotFiles(snapshot, dir))); None }
+      case restoreSnapshotFiles(snapshot, backupPath, restorePath) => { handleBackupOutput(facsimile.restoreSnapshotFiles(snapshot, backupPath, restorePath)) }
       case "get-configuration" => { println(write(facsimile.configuration())); None }
       case "set-configuration" => { facsimile.configuration(parse(Source.stdin.getLines.mkString("")).extract[Configuration]); None }
       case "help" => { println(help); None }

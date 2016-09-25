@@ -22,7 +22,7 @@ package info.raack.facsimile
 import java.io.File
 import java.io.FileWriter
 import java.nio.file.Files
-import java.nio.file.Path
+import java.nio.file.{Path, Paths}
 import java.nio.file.FileSystems
 import java.time.Instant
 import java.time.Month
@@ -164,22 +164,23 @@ object Backup {
   }
 
   private def mountEncFsForBackup(source: String, destination: String): Try[Unit] = {
-    mountEncFs(source, destination, "--reverse -o ro")
+    mountEncFs(source, destination, "", "--reverse -o ro")
   }
 
-  private def mountEncFsForRestore(source: String, destination: String): Try[Unit] = {
-    mountEncFs(source, destination, "")
+  private def mountEncFsForRestore(source: String, destination: String, encfsConfigPath: String): Try[Unit] = {
+    mountEncFs(source, destination, s"ENCFS6_CONFIG=$encfsConfigPath", "")
   }
 
-  private def mountEncFs(source: String, destination: String, extraOptions: String): Try[Unit] = {
+  private def mountEncFs(source: String, destination: String, prefix: String, extraOptions: String): Try[Unit] = {
     val initialMessages = scala.collection.mutable.ArrayBuffer.empty[String]
     Try {
       // TODO - get password from user
       // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK
       // ONLY USE IT TEMPORARILY ONCE WHEN ENCFS CONFIG FILE IS MISSING
+      println(s"running sudo mkdir -p $destination && cat /var/lib/facsimile/password | sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")
       (Process(s"sudo mkdir -p $destination") #&&
         Process("cat /var/lib/facsimile/password") #|
-        Process(s"sudo encfs --standard --stdinpass $extraOptions $source $destination") //#&&
+        Process(s"sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination") //#&&
         //Process("sudo fusermount -u /tmp/encryptedbackup") #&&
         //Process("sudo /usr/share/facsimile/set-encfs-to-stream-names") #&&
         //Process("cat /var/lib/facsimile/password") #|
@@ -187,6 +188,7 @@ object Backup {
         ).
         lineStream(ProcessLogger(line => { initialMessages += line })).
         foreach(line => { initialMessages += line })
+      println(initialMessages.mkString("\n"))
     }.recoverWith {
       case ex =>
         val errorRegex = """Nonzero exit code: (\d+)""".r
@@ -432,12 +434,48 @@ object Backup {
     }.seq
   }
 
-  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Unit = {
-    // 1) TODO - verify that restorePath does not exist
-    // 2) create restorePath as a directory
-    // 3) enfs mount from a new temp directory to restorePath
-    // 4) rsync
+  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Try[Unit] = {
+    // 1) create restorePath as a directory
+    Files.createDirectories(Paths.get(restorePath))
+    val tempEncfsFile = Files.createTempFile("facsimile-tempencfs", "file")
+
+    // 2) encfs mount from a new temp backup directory to temp restore directory
+    val tempLocalBackupPath = Files.createTempDirectory("facsimile-tempbackuppath")
+    new java.io.File(tempLocalBackupPath.toString)
+
+    val tempLocalRestorePath = Files.createTempDirectory("facsimile-temprestorepath")
+
+    // 3) rsync
+    val restore = Try {
+      val encodedPath = Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $backupPath").lineStream.mkString("").replaceAll("/$", "")
+
+      System.out.println(s"encoded path $encodedPath")
+      val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids traack@transmission:/mnt/tank/backup/lune-rsnapshot/.zfs/snapshot/facsimile-$snapshot/backup/$encodedPath $tempLocalBackupPath/"""
+
+      System.out.println(s"about to run $command")
+      //Thread.sleep(30000)
+      System.out.println(Process(command).lineStream.mkString(" "))
+
+      val command2 = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids traack@transmission:/mnt/tank/backup/lune-rsnapshot/.zfs/snapshot/facsimile-$snapshot/encfs_config $tempEncfsFile"""
+
+      System.out.println(s"about to run $command2")
+      System.out.println(Process(command2).lineStream.mkString(" "))
+
+      new java.io.File(tempLocalRestorePath.toString)
+      mountEncFsForRestore(tempLocalBackupPath.toString, tempLocalRestorePath.toString, tempEncfsFile.toString())
+
+      val command3 = s"""sudo nice -n 19 rsync -aHAXvv --progress --omit-link-times --numeric-ids $tempLocalRestorePath/ $restorePath/"""
+
+      System.out.println(s"about to run $command3")
+      System.out.println(Process(command3).lineStream.mkString(" "))
+    }
+
+    // 4) remove encfs mount
+    runRemoteCommand(s"sudo fusermount -u $tempLocalRestorePath", "Could not unmount encrypted directory")
+    runRemoteCommand(s"sudo rm -rf /tmp/encfs_config $tempLocalBackupPath $tempLocalRestorePath", "Could not remove temporary directories")
 
     // TODO - if restoring full system, make sure root of destination is mounted elsewhere on FS, not root
+
+    restore
   }
 }

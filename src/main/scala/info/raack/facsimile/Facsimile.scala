@@ -151,7 +151,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     Backup.getSnapshotFiles(snapshot, directory, config)
   }
 
-  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Unit = {
+  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Try[Unit] = {
     Backup.restoreSnapshotFiles(snapshot, backupPath, restorePath)
   }
 
