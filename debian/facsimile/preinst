@@ -74,15 +74,6 @@ if ! getent passwd facsimile >/dev/null; then
 	  facsimile  >/dev/null
 fi
 
-# facsimile needs sudo access to the rsync command
-# TODO - restrict to running rsync
-echo "facsimile ALL=(ALL) NOPASSWD: /usr/bin/nice" > /etc/sudoers.d/facsimile
-echo "facsimile ALL=(ALL) NOPASSWD: /bin/mkdir" >> /etc/sudoers.d/facsimile
-echo "facsimile ALL=(ALL) NOPASSWD: /usr/bin/encfs" >> /etc/sudoers.d/facsimile
-echo "facsimile ALL=(ALL) NOPASSWD: /usr/bin/encfsctl" >> /etc/sudoers.d/facsimile
-echo "facsimile ALL=(ALL) NOPASSWD: /bin/fusermount" >> /etc/sudoers.d/facsimile
-chmod 440 /etc/sudoers.d/facsimile
-
 # creating facsimile library directory
 if [ ! -d $DATADIR -a ! -L $DATADIR ]; then
  	mkdir $DATADIR
