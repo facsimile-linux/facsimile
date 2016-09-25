@@ -1,2 +1,10 @@
-facsimile ALL=(ALL) NOPASSWD: /usr/bin/nice
+# all admin users can run facsimile as the facsimile user (to edit configuration, etc)
 %admin ALL=(facsimile) NOPASSWD: /usr/bin/facsimile
+
+# facsimile user needs to be able to run limited functions as the root user
+facsimile ALL=(ALL) NOPASSWD: /usr/bin/nice
+facsimile ALL=(ALL) NOPASSWD: /bin/mkdir
+facsimile ALL=(ALL) NOPASSWD: /usr/bin/encfs
+facsimile ALL=(ALL) NOPASSWD: /usr/bin/encfsctl
+facsimile ALL=(ALL) NOPASSWD: /bin/fusermount
+facsimile ALL=(ALL) NOPASSWD: /usr/share/facsimile/set-encfs-to-stream-names
