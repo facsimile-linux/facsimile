@@ -434,14 +434,9 @@ object Backup {
     }.seq
   }
 
-  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Try[Unit] = {
+  def restoreSnapshotFiles(config: Configuration, snapshot: String, backupPath: String, restorePath: String): Try[Unit] = {
     // 1) create restorePath as a directory
     Files.createDirectories(Paths.get(restorePath))
-    val tempEncfsFile = Files.createTempFile("facsimile-tempencfs", "file")
-
-    // 2) encfs mount from a new temp backup directory to temp restore directory
-    val tempLocalBackupPath = Files.createTempDirectory("facsimile-tempbackuppath")
-    new java.io.File(tempLocalBackupPath.toString)
 
     val tempLocalRestorePath = Files.createTempDirectory("facsimile-temprestorepath")
 
@@ -450,29 +445,43 @@ object Backup {
       val encodedPath = Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $backupPath").lineStream.mkString("").replaceAll("/$", "")
 
       System.out.println(s"encoded path $encodedPath")
-      val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids traack@transmission:/mnt/tank/backup/lune-rsnapshot/.zfs/snapshot/facsimile-$snapshot/backup/$encodedPath $tempLocalBackupPath/"""
+      val (tempLocalBackupPath, tempEncfsFile) = if (config.configurationType == "remote") {
+        val rc = config.remoteConfiguration
+        val tempEncfsFile = Files.createTempFile("facsimile-tempencfs", "file")
 
-      System.out.println(s"about to run $command")
-      //Thread.sleep(30000)
-      System.out.println(Process(command).lineStream.mkString(" "))
+        // 2) encfs mount from a new temp backup directory to temp restore directory
+        val tempLocalBackupPath = Files.createTempDirectory("facsimile-tempbackuppath")
+        new java.io.File(tempLocalBackupPath.toString)
 
-      val command2 = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids traack@transmission:/mnt/tank/backup/lune-rsnapshot/.zfs/snapshot/facsimile-$snapshot/encfs_config $tempEncfsFile"""
+        val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${rc.path}/.zfs/snapshot/facsimile-$snapshot/backup/$encodedPath $tempLocalBackupPath/"""
 
-      System.out.println(s"about to run $command2")
-      System.out.println(Process(command2).lineStream.mkString(" "))
+        System.out.println(s"about to run $command")
+        System.out.println(Process(command).lineStream.mkString(" "))
 
-      new java.io.File(tempLocalRestorePath.toString)
-      mountEncFsForRestore(tempLocalBackupPath.toString, tempLocalRestorePath.toString, tempEncfsFile.toString())
+        val command2 = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${rc.path}/.zfs/snapshot/facsimile-$snapshot/encfs_config $tempEncfsFile"""
 
-      val command3 = s"""sudo nice -n 19 rsync -aHAXvv --progress --omit-link-times --numeric-ids $tempLocalRestorePath/ $restorePath/"""
+        System.out.println(s"about to run $command2")
+        System.out.println(Process(command2).lineStream.mkString(" "))
 
-      System.out.println(s"about to run $command3")
-      System.out.println(Process(command3).lineStream.mkString(" "))
+        (tempLocalBackupPath, tempEncfsFile)
+      } else {
+        throw new RuntimeException("Local configuration type not yet supported")
+      }
+
+      try {
+        new java.io.File(tempLocalRestorePath.toString)
+        mountEncFsForRestore(tempLocalBackupPath.toString, tempLocalRestorePath.toString, tempEncfsFile.toString())
+
+        val command3 = s"""sudo nice -n 19 rsync -aHAXvv --progress --omit-link-times --numeric-ids $tempLocalRestorePath/ $restorePath/"""
+
+        System.out.println(s"about to run $command3")
+        System.out.println(Process(command3).lineStream.mkString(" "))
+      } finally {
+        // 4) remove encfs mount
+        runRemoteCommand(s"sudo fusermount -u $tempLocalRestorePath", "Could not unmount encrypted directory")
+        runRemoteCommand(s"sudo rm -rf $tempEncfsFile $tempLocalBackupPath $tempLocalRestorePath", "Could not remove temporary directories")
+      }
     }
-
-    // 4) remove encfs mount
-    runRemoteCommand(s"sudo fusermount -u $tempLocalRestorePath", "Could not unmount encrypted directory")
-    runRemoteCommand(s"sudo rm -rf /tmp/encfs_config $tempLocalBackupPath $tempLocalRestorePath", "Could not remove temporary directories")
 
     // TODO - if restoring full system, make sure root of destination is mounted elsewhere on FS, not root
 
