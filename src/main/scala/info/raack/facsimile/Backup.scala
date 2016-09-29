@@ -47,6 +47,7 @@ object Backup {
 
   val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "total")
   val tempBackupLogPath = Files.createTempFile("facsimile-log", null)
+  tempBackupLogPath.toFile().deleteOnExit()
 
   /*
    * Possible backup commands:
@@ -411,27 +412,41 @@ object Backup {
     val endLine = """(r)ecv_file_list\sdone""".r
     val fileLine = """\[Receiver\]\si=\d+\s\d\s(.+)\smode=(\d+)\slen=(\S+)\suid=(\d+)\sgid=(\d+)\sflags=(\d+)""".r
 
-    val items = Try {
-      val actualDirectory = Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $directory").lineStream.mkString("")
+    Try {
+      val actualDirectory = if (directory == "/") {
+        "/"
+      } else {
+        Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $directory").lineStream.mkString("")
+      }
       Process(s"sudo nice -n 19 rsync --dry-run -lptgoDHAXvvvv --dirs -M--fake-super --numeric-ids ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host}:${tempConfig.remoteConfiguration.path}/.zfs/snapshot/facsimile-$snapshot/backup/$actualDirectory/ /tmp/Desktop/").
         // TODO - do not ignore errors
+      // TODO - if the directory which is being listed does not have r and x for the user running facsimile, then refuse to go into directory
         lineStream(ProcessLogger(_ => {})).flatMap { line =>
           line match {
             case startLine(x) if !fileList => { fileList = true; None }
             case endLine(x) if fileList => { fileList = false; None }
-            case fileLine(name, mode, len, uid, gid, flags) if fileList => Some(SnapshotFile(name, uid.replace(",", "").toInt, Some(1234), false))
+            case fileLine(name, mode, len, uid, gid, flags) if fileList => Some(SnapshotFile(name, uid.replace(",", "").toInt, Some(1234), isDir(mode)))
             case _ => None
           }
-        }
+        }.par.filter(_.name != "./").map { file =>
+          val fullPath = s"${actualDirectory.replaceAll("/$", "")}/${file.name}"
+          file.copy(name = Process(s"sudo encfsctl decode --extpass='/usr/share/facsimile/facsimile-password' -- / $fullPath").
+            lineStream.mkString("").replaceAll("/$", "").replaceFirst(".*/(\\S+)", "$1"))
+        }.seq
     } match {
       case Success(x) => x
       case Failure(e) => Seq()
     }
+  }
 
-    items.par.map { file =>
-      file.copy(name = Process(s"sudo encfsctl decode --extpass='/usr/share/facsimile/facsimile-password' -- / ${file.name}").
-        lineStream.mkString(""))
-    }.seq
+  private def isDir(mode: String): Boolean = {
+    val regex = """(\d)?(\d)\d{5}\d{9}""".r
+    Integer.toBinaryString(Integer.parseInt(mode, 8)) match {
+      case regex(null, dir) if (dir == "1") => true
+      case regex(file, dir) if (file == "0" && dir == "1") => true
+      case regex(file, dir) if (file == "1" && dir == "0") => false
+      case other => throw new RuntimeException(s"Unexpected file and directory bits $other")
+    }
   }
 
   def restoreSnapshotFiles(config: Configuration, snapshot: String, backupPath: String, restorePath: String): Try[Unit] = {

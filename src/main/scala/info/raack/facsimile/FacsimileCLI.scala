@@ -35,14 +35,14 @@ object FacsimileCLI extends App {
 
   val facsimile = new Facsimile()
 
-  args.headOption.map(process(_).getOrElse(0)).getOrElse({
-    // wait for commands
-    print("Welcome to Facsimile!\n> ")
-    Source.stdin.getLines.map(x => { val o = process(x); if (o == None) { print("> ") }; o }).collectFirst({ case Some(x) => x }).getOrElse(0)
-  }) match {
-    case 0 => ()
-    case other => sys.exit(other)
-  }
+  sys.exit(args.mkString(" ") match {
+    case "" => {
+      // wait for commands
+      print("Welcome to Facsimile!\n> ")
+      Source.stdin.getLines.map(x => { val o = process(x); if (o == None) { print("> ") }; o }).collectFirst({ case Some(x) => x }).getOrElse(0)
+    }
+    case command => process(command).getOrElse(0)
+  })
 
   private def process(command: String): Option[Int] = {
     implicit val formats = Serialization.formats(NoTypeHints)

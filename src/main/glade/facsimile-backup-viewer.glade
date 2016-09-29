@@ -20,14 +20,22 @@
             <property name="hexpand">True</property>
             <property name="orientation">vertical</property>
             <child>
-              <object class="GtkFileChooserWidget" id="file-chooser-widget">
+              <object class="GtkScrolledWindow" id="scrolledwindow1">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="margin_top">10</property>
-                <property name="create_folders">False</property>
-                <property name="local_only">False</property>
-                <property name="select_multiple">True</property>
-                <property name="show_hidden">True</property>
+                <property name="can_focus">True</property>
+                <property name="shadow_type">in</property>
+                <child>
+                  <object class="GtkTreeView" id="file-chooser-view">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <signal name="row-activated" handler="on_file_chooser_view_row_activated_gui" swapped="no"/>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection" id="treeview-selection">
+                        <property name="mode">multiple</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
               <packing>
                 <property name="expand">True</property>
@@ -99,7 +107,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="margin_top">1</property>
-                    <signal name="row-activated" handler="on_snapshot_list_box_row_activated" swapped="no"/>
+                    <signal name="row-activated" handler="on_snapshot_list_box_row_activated_gui" swapped="no"/>
                   </object>
                 </child>
               </object>

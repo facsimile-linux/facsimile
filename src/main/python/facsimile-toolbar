@@ -118,44 +118,87 @@ class SnapshotListBoxRow(Gtk.ListBoxRow):
         self.display_text = display_text
         self.add(Gtk.Label(display_text))
 
+class File(object):
+    def __init__(self, name, dir):
+        self.name = name
+        self.dir = dir
+
 class SnapshotViewer():
 
     def __init__(self):
-        self.gladefile = "/usr/share/facsimile-toolbar/facsimile-backup-viewer.glade"  
+        self.gladefile = "/home/traack/Programming/github/facsimile-linux/facsimile/src/main/glade/facsimile-backup-viewer.glade"  
         self.builder = Gtk.Builder()
         self.builder.add_from_file(self.gladefile)
 
         self.builder.connect_signals(self)
-    
+
         self.window = self.builder.get_object("backup-viewer")
         self.snapshot_list_box = self.builder.get_object("snapshot-list-box")
-        self.file_chooser_widget = self.builder.get_object("file-chooser-widget")
+        
+        self.setup_file_browser_gui()
+    
+    def setup_file_browser_gui(self):
+        # Cannot set up the ListStore properly in Glade, because of the data structure I want to represent
+        # http://stackoverflow.com/a/22847402/474043 shows us how
+        self.file_chooser_model = Gtk.ListStore(GObject.TYPE_PYOBJECT)
+        
+        self.file_chooser_view = self.builder.get_object("file-chooser-view")
+        self.file_chooser_view.set_model(self.file_chooser_model)
+        
+        self.file_chooser_view.append_column(self.make_column_gui("Name", lambda obj: ("(dir) " if obj.dir else "") + obj.name))
+    
+    def make_column_gui(self, caption, getter):
+        rend = Gtk.CellRendererText()
+        col = Gtk.TreeViewColumn(caption, rend)
+        def _set_cell_text(column, cell, model, it, ignored):
+            obj = model.get_value(it, 0)
+            cell.set_property('text', getter(obj))
+        col.set_cell_data_func(rend, _set_cell_text)
+        return col
 
     def show(self):
         th = threading.Thread(target=self.populate_snapshot_list, args=())
         th.daemon = True
         th.start()
-        GLib.idle_add(self.change_to_backup_directory, None)
         self.window.present()
-       
-    def change_to_backup_directory(self, timestamp = None):
-        if not timestamp:
-            self.file_chooser_widget.set_filename('/facsimile-sshfs/backup/backup/dummy')
-        else:
-            dir = '/facsimile-sshfs/backup/.zfs/snapshot/facsimile-' + timestamp + '/backup/dummy'
-            self.file_chooser_widget.set_filename(dir)
         
     def populate_snapshot_list(self):
-        GLib.idle_add(self.display_snapshots, sorted(json.loads(subprocess.check_output(["facsimile", "list-snapshots"], universal_newlines = True)).items()))
+        GLib.idle_add(self.display_snapshots_gui, sorted(json.loads(subprocess.check_output(["facsimile", "list-snapshots"], universal_newlines = True)).items()))
     
-    def display_snapshots(self, snapshots):
+    def display_snapshots_gui(self, snapshots):
         for timestamp, display_text in snapshots:
             self.snapshot_list_box.add(SnapshotListBoxRow(timestamp, display_text))
 
         self.snapshot_list_box.show_all()
+        
+        self.current_snapshot = snapshots[-1][0]
+        
+        self.change_to_backup_directory_gui("/")
+       
+    def change_to_backup_directory_gui(self, path):
+        self.file_chooser_model.clear()
+        th = threading.Thread(target=self.load_backup_directory, args=(path,))
+        th.daemon = True
+        th.start()
     
-    def on_snapshot_list_box_row_activated(self, widget, row):
-        self.change_to_backup_directory(row.timestamp)
+    def load_backup_directory(self, path):
+        GLib.idle_add(self.update_backup_directory_file_list_gui, path, json.loads(subprocess.check_output(["facsimile", "list-snapshot-files", self.current_snapshot, path], universal_newlines = True)))
+    
+    def update_backup_directory_file_list_gui(self, path, files):
+        self.file_chooser_model.clear()
+        for file in files:
+            self.file_chooser_model.append([File(file['name'], file['isDirectory'] == True)])
+        self.current_path = path
+    
+    def on_snapshot_list_box_row_activated_gui(self, widget, row):
+        self.current_snapshot = row.timestamp
+        self.change_to_backup_directory_gui("/")
+    
+    def on_file_chooser_view_row_activated_gui(self, treeview, path, column):
+        model = treeview.get_model()
+        iter = model.get_iter(path)
+        new_path = os.path.join(self.current_path, model.get_value(iter, 0).name)
+        self.change_to_backup_directory_gui(new_path)
 
 class App():
     def __init__(self):
@@ -163,6 +206,7 @@ class App():
         self.indicator = AppIndicator3.Indicator.new("facsimile-toolbar",os.path.abspath('/usr/share/facsimile-toolbar/images/backup1.svg'), AppIndicator3.IndicatorCategory.SYSTEM_SERVICES)
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         
+
         menu = Gtk.Menu()
         
         self.menu_item = Gtk.MenuItem("Loading...")
