@@ -52,11 +52,13 @@
                 <property name="margin_bottom">10</property>
                 <property name="layout_style">start</property>
                 <child>
-                  <object class="GtkButton" id="button1">
-                    <property name="label" translatable="yes">button</property>
+                  <object class="GtkButton" id="back_button">
+                    <property name="label" translatable="yes">Back</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <property name="focus_on_click">False</property>
+                    <signal name="clicked" handler="on_back_button_clicked_gui" swapped="no"/>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -65,11 +67,13 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkButton" id="button2">
-                    <property name="label" translatable="yes">button</property>
+                  <object class="GtkButton" id="restore_button">
+                    <property name="label" translatable="yes">Restore</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <property name="focus_on_click">False</property>
+                    <signal name="clicked" handler="on_restore_button_clicked_gui" swapped="no"/>
                   </object>
                   <packing>
                     <property name="expand">False</property>

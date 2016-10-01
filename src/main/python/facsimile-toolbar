@@ -199,6 +199,13 @@ class SnapshotViewer():
         iter = model.get_iter(path)
         new_path = os.path.join(self.current_path, model.get_value(iter, 0).name)
         self.change_to_backup_directory_gui(new_path)
+        
+    def on_back_button_clicked_gui(self, extra):
+        new_path = os.path.dirname(self.current_path)
+        self.change_to_backup_directory_gui(new_path)
+        
+    def on_restore_button_clicked_gui(self, extra):
+        print("restore")
 
 class App():
     def __init__(self):
