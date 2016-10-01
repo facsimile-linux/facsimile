@@ -123,6 +123,23 @@ class File(object):
         self.name = name
         self.dir = dir
 
+class RestoreDialog():
+    def __init__(self, current_snapshot, to_restore):
+        dialog = Gtk.FileChooserDialog("Enter a new folder name to contain restored files", None, Gtk.FileChooserAction.CREATE_FOLDER,
+            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, "Restore", Gtk.ResponseType.OK))
+        dialog.set_action(Gtk.FileChooserAction.CREATE_FOLDER)
+        dialog.set_default_size(1024, 768)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            self.restore(current_snapshot, to_restore, dialog.get_filename())
+
+        dialog.destroy()
+        
+    def restore(self, current_snapshot, to_restore, directory):
+        print("about to restore " + directory + " to " + current_snapshot + "/" + to_restore)
+        subprocess.check_output(["facsimile", "restore-snapshot-files", current_snapshot, to_restore, directory], universal_newlines = True)
+    
 class SnapshotViewer():
 
     def __init__(self):
@@ -205,7 +222,10 @@ class SnapshotViewer():
         self.change_to_backup_directory_gui(new_path)
         
     def on_restore_button_clicked_gui(self, extra):
-        print("restore")
+        selection = self.file_chooser_view.get_selection()
+        model, iter = selection.get_selected()
+        path = os.path.join(self.current_path, model.get_value(iter, 0).name)
+        RestoreDialog(self.current_snapshot, path)
 
 class App():
     def __init__(self):

@@ -30,9 +30,7 @@
                     <property name="can_focus">True</property>
                     <signal name="row-activated" handler="on_file_chooser_view_row_activated_gui" swapped="no"/>
                     <child internal-child="selection">
-                      <object class="GtkTreeSelection" id="treeview-selection">
-                        <property name="mode">multiple</property>
-                      </object>
+                      <object class="GtkTreeSelection" id="treeview-selection"/>
                     </child>
                   </object>
                 </child>
