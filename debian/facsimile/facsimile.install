@@ -2,5 +2,4 @@ target/pack/lib usr/share/facsimile
 src/main/shell/facsimile usr/bin
 src/main/shell/facsimile-password usr/share/facsimile
 LICENSE /usr/share/facsimile
-src/main/autofs/facsimile.autofs etc/auto.master.d
 src/main/sudoers.d/facsimile etc/sudoers.d

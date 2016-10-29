@@ -45,7 +45,6 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   val statusPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "status")
   val lockFilePath = FileSystems.getDefault().getPath("/", "var", "lock", "facsimile")
   val configPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "config")
-  val autoFsPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "autofs")
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
   val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
   var lastPercentChange = System.currentTimeMillis()
@@ -159,13 +158,6 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     implicit val formats = Serialization.formats(NoTypeHints)
     Files.write(configPath, write(config).getBytes)
     setReadAllPerms(configPath)
-  }
-
-  private def writeAutoFs(config: Configuration): Unit = {
-    // TODO - update to the actual backup path used
-    // TODO - fix security hole which allows user one to view user two's protected files through backup
-    val remoteHostDestination = s"${config.remoteConfiguration.user}@${config.remoteConfiguration.host}\\:${config.remoteConfiguration.path}"
-    Files.write(autoFsPath, "backup  -fstype=fuse,rw,idmap=user,allow_other,IdentityFile=/home/traack/.ssh/id_rsa :sshfs\\#traack@transmission\\:/mnt/tank/backup/lune-rsnapshot".getBytes)
   }
 
   private def setReadAllPerms(path: Path): Unit = {
