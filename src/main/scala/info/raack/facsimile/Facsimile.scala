@@ -19,9 +19,11 @@
 
 package info.raack.facsimile
 
+import java.io.File
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.FileSystems
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermission
@@ -40,20 +42,24 @@ import org.json4s.jackson.JsonMethods.parse
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 
-class Facsimile(configFile: String = "/etc/facsimile.conf") {
+class Facsimile {
+
+  val configDir = Option(System.getProperty("testingConfigDir")).map(Paths.get(_))
+    .getOrElse(FileSystems.getDefault().getPath("/", "var", "lib", "facsimile"))
 
   val statusPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "status")
   val lockFilePath = FileSystems.getDefault().getPath("/", "var", "lock", "facsimile")
-  val configPath = FileSystems.getDefault().getPath("/", "var", "lib", "facsimile", "config")
+  val configPath = configDir.resolve("config")
   val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
   val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
 
-  var config: Configuration = Try {
-    implicit val formats = DefaultFormats
-    parse(new String(Files.readAllBytes(configPath))).extract[Configuration]
-  }.getOrElse(Configuration(automaticBackups = false, configurationType = "remote", remoteConfiguration = RemoteConfiguration(host = "", user = "", path = "")))
+  val configurationResolver = new ConfigurationResolver()
+
+  var config: Configuration = configurationResolver.resolve(Try {
+    new String(Files.readAllBytes(configPath))
+  }.getOrElse(""))
 
   val lastStartMillis = Try {
     Some(new String(Files.readAllBytes(lastStartTimePath)).toLong)
@@ -76,10 +82,6 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
      }
    */
 
-  val (sourceFilesystem, targetHost, targetFilesystem) = {
-    (StandardFilesystem(), Host("localhost"), ZFSFilesystem("traackbackup", Some("/home/traack/testbackup"), false))
-  }
-
   private def getStatusString(minutesToCompleteOption: Option[Long]): String = {
     implicit val formats = Serialization.formats(NoTypeHints)
     write(Map("time_remaining" -> minutesToCompleteOption.getOrElse("unknown")))
@@ -101,7 +103,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     createLockFile()
     Option(FileChannel.open(lockFilePath, StandardOpenOption.WRITE).tryLock()).map { lock =>
       try {
-        Backup.process(sourceFilesystem, targetHost, targetFilesystem, config, printCompletion).map { s =>
+        Backup.process(config, printCompletion).map { s =>
           val endTime = System.currentTimeMillis()
           Files.write(lastStartTimePath, startTime.toString.getBytes)
           setReadAllPerms(lastStartTimePath)
@@ -128,7 +130,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   }
 
   def schedule(turnOn: Boolean): Unit = {
-    config.automaticBackups = turnOn
+    config = config match { case x: RemoteConfiguration => x.copy(automaticBackups = turnOn) }
     writeConfig()
   }
 
@@ -136,14 +138,17 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
     Backup.snapshots(config)
   }
 
-  def configuration(): Configuration = {
-    config
+  def getConfiguration(): String = {
+    configurationResolver.serialize(config)
   }
 
-  def configuration(newConfig: Configuration): Unit = {
-    config = newConfig
+  def setConfiguration(newConfig: String): Unit = {
+    config = configurationResolver.resolve(newConfig)
     writeConfig()
-    writeAutoFs(newConfig)
+  }
+
+  def testConfiguration(config: String): ConfigurationTestResult = {
+    ConfigurationAssistant.testConfiguration(configurationResolver.resolve(config))
   }
 
   def getSnapshotFiles(snapshot: String, directory: String): Seq[SnapshotFile] = {
@@ -155,8 +160,7 @@ class Facsimile(configFile: String = "/etc/facsimile.conf") {
   }
 
   private def writeConfig(): Unit = {
-    implicit val formats = Serialization.formats(NoTypeHints)
-    Files.write(configPath, write(config).getBytes)
+    Files.write(configPath, configurationResolver.serialize(config).getBytes)
     setReadAllPerms(configPath)
   }
 

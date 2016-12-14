@@ -51,6 +51,7 @@ addCompilerPlugin("org.psywerx.hairyfotr" %% "linter" % "0.1.12")
 packAutoSettings
 
 libraryDependencies ++= Seq(
+  "org.json4s" %% "json4s-ext" % "[3.4.0]",
   "org.json4s" %% "json4s-jackson" % "[3.4.0]",
   "org.scalatest" %% "scalatest" % "[2.2.6,3)" % "test",
   "org.scalactic" %% "scalactic" % "[2.2.6,3)" % "test"

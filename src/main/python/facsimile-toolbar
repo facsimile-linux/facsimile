@@ -29,9 +29,9 @@ import sys
 import threading
 import time
 
-LocalConfiguration = collections.namedtuple('LocalConfiguration', [])
-RemoteConfiguration = collections.namedtuple('RemoteConfiguration', ['host','user','private_key_saved','path'])
-Configuration = collections.namedtuple('Configuration', ['automaticBackups', 'remoteConfiguration', 'localConfiguration', 'configurationType'])
+ConfigurationWrapper = collections.namedtuple('ConfigurationWrapper', ['jsonClass', 'configuration'])
+Configuration = collections.namedtuple('Configuration', ['jsonClass','automaticBackups','host','user','target'])
+FixedPath = collections.namedtuple('FixedPath', ['jsonClass','path'])
 
 class ConfigurationDialog():
     def __init__(self, save_configuration_callback):
@@ -59,15 +59,12 @@ class ConfigurationDialog():
     def show(self, configuration):
         self.automatic_backups.set_active(configuration.get("automaticBackups", False))
 
-        remote_configuration = configuration.get("remoteConfiguration", {})
-        self.remote_host.set_text(remote_configuration.get("host", ""))
-        self.user.set_text(remote_configuration.get("user", ""))
-        self.private_key.set_text("<saved>" if remote_configuration.get("private_key_saved", False) else "")
-        self.path.set_text(remote_configuration.get("path", ""))
+        self.remote_host.set_text(configuration.get("host", ""))
+        self.user.set_text(configuration.get("user", ""))
+        self.private_key.set_text("<saved>" if configuration.get("private_key_saved", False) else "")
+        self.path.set_text(configuration.get("target", {}).get("path", ""))
 
-        local_configuration = configuration.get("localConfiguration", {})
-
-        self.backup_type.set_active([row[0] for row in self.backup_type.get_model()].index(configuration.get("configurationType").title()))
+        self.backup_type.set_active([row[0] for row in self.backup_type.get_model()].index("Local" if configuration.get("configurationType") == "LocalConfiguration" else "Remote"))
 
         self.window.present()
     
@@ -77,15 +74,17 @@ class ConfigurationDialog():
         #self.private_key_contents = 
         
     def on_apply_clicked(self, item):
-        if not self.save_configuration_callback(Configuration(
-                               localConfiguration = LocalConfiguration(),
-                               remoteConfiguration = RemoteConfiguration(
-                                  host = self.remote_host.get_text(),
-                                  user = self.user.get_text(),
-                                  private_key_saved = True,
-                                  path = self.path.get_text()),
-                              automaticBackups = self.automatic_backups.get_active(),
-                              configurationType = "local" if self.backup_type.get_model()[self.backup_type.get_active_iter()][0] == 'Local' else "remote")):
+        if not self.save_configuration_callback(
+          ConfigurationWrapper(
+            jsonClass = 'ConfigurationWrapperV1',
+            configuration = Configuration(
+              host = self.remote_host.get_text(),
+              user = self.user.get_text(),
+              target = FixedPath(
+                jsonClass = 'FixedPath',
+                path = self.path.get_text()),
+              automaticBackups = self.automatic_backups.get_active(),
+              jsonClass = "LocalConfiguration" if self.backup_type.get_model()[self.backup_type.get_active_iter()][0] == 'Local' else "RemoteConfiguration"))):
             self.close_and_reset()
         else:
             # TODO - handle this in a better way in the UI
@@ -143,7 +142,7 @@ class RestoreDialog():
 class SnapshotViewer():
 
     def __init__(self):
-        self.gladefile = "/home/traack/Programming/github/facsimile-linux/facsimile/src/main/glade/facsimile-backup-viewer.glade"  
+        self.gladefile = "/usr/share/facsimile-toolbar/facsimile-backup-viewer.glade"  
         self.builder = Gtk.Builder()
         self.builder.add_from_file(self.gladefile)
 
@@ -232,7 +231,6 @@ class App():
         self.configuration_dialog = ConfigurationDialog(self.save_configuration)
         self.indicator = AppIndicator3.Indicator.new("facsimile-toolbar",os.path.abspath('/usr/share/facsimile-toolbar/images/backup1.svg'), AppIndicator3.IndicatorCategory.SYSTEM_SERVICES)
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-        
 
         menu = Gtk.Menu()
         
@@ -273,7 +271,8 @@ class App():
         th.start()
         
     def get_config_then_open_window(self):
-        GLib.idle_add(self.configuration_dialog.show, json.loads(subprocess.check_output(["facsimile", "get-configuration"], universal_newlines = True)))
+        GLib.idle_add(self.configuration_dialog.show,
+          json.loads(subprocess.check_output(["facsimile", "get-configuration"], universal_newlines = True)).get('configuration',{}))
 
     def open_show_snapshots_window(self, item):
         SnapshotViewer().show()

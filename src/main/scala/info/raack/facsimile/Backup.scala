@@ -82,9 +82,9 @@ object Backup {
    */
 
   // TODO - allow status callbacks so CLI can have information and print it there
-  def process(source: Filesystem, target: Host, destination: Filesystem, tempConfig: Configuration, progressNotifier: (Int) => Unit): Try[Unit] = {
+  def process(config: Configuration, progressNotifier: (Int) => Unit): Try[Unit] = {
 
-    (source, destination) match {
+    (None, None) match {
       case (s: PipedTransferSupported, d: PipedTransferSupported) if s.pipedTransferType == d.pipedTransferType => {
         // source and destination support piped transfer and they use the same mechanism
         Failure(new IllegalArgumentException("Piped transfer not yet supported"))
@@ -128,12 +128,24 @@ object Backup {
         // ssh-keyscan -H 192.168.147.30 >> /var/lib/facsimile/.ssh/known_hosts
         // ssh-keyscan -H transmission >> /var/lib/facsimile/.ssh/known_hosts
         // and then unique the ~/.ssh/known_hosts file
-        val remoteHostDestination = s"${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host}:${tempConfig.remoteConfiguration.path}"
+
+        val remote = config match {
+          // TODO - will have to add case for other configs, for now it will explode if we attempt to use others
+          case x: RemoteConfiguration => x
+        }
+
+        val fixedPath = config.target match {
+          case x: FixedPath => x
+        }
+
+        val remoteHostDestination = s"${remote.user}@${remote.host}:${fixedPath.path}"
 
         val initialMessage = mountEncFsForBackup("/", "/tmp/encryptedbackup")
 
+        val previousManualSnapshot = getPreviousManualSnapshot(remote)
+
         val backupMessage = initialMessage.flatMap { s =>
-          copy("/tmp/encryptedbackup", remoteHostDestination, allExcludes, progressNotifier)
+          copy("/tmp/encryptedbackup", remoteHostDestination, allExcludes, previousManualSnapshot, progressNotifier)
         }
 
         val copyEncryptedConfigurationMessage = backupMessage.flatMap { s =>
@@ -145,11 +157,11 @@ object Backup {
           val snapshotInstant = Instant.now()
           // TODO - replace hardcoded dataset path with actual dataset path
           val dataset = "tank/backup/lune-rsnapshot"
-          val command2 = s"ssh ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
+          val command2 = s"ssh ${remote.user}@${remote.host} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
           println(command2)
           val output2 = command2 !!
 
-          cullSnapshots(snapshotInstant, tempConfig)
+          cullSnapshots(snapshotInstant, remote)
         }
 
         Files.delete(tempBackupLogPath)
@@ -161,6 +173,15 @@ object Backup {
 
         logCopyMessage
       }
+    }
+  }
+
+  private def getPreviousManualSnapshot(config: RemoteConfiguration): Option[String] = {
+    // TODO - adjust when implementing manual (rsync link-dest-based snapshots)
+    if (true == false) {
+      snapshotTimes(config).map(_.toString).sortWith(_ > _).headOption
+    } else {
+      None
     }
   }
 
@@ -176,17 +197,12 @@ object Backup {
     val initialMessages = scala.collection.mutable.ArrayBuffer.empty[String]
     Try {
       // TODO - get password from user
-      // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK
+      // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK - why?
       // ONLY USE IT TEMPORARILY ONCE WHEN ENCFS CONFIG FILE IS MISSING
       println(s"running sudo mkdir -p $destination && cat /var/lib/facsimile/password | sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")
       (Process(s"sudo mkdir -p $destination") #&&
         Process("cat /var/lib/facsimile/password") #|
-        Process(s"sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination") //#&&
-        //Process("sudo fusermount -u /tmp/encryptedbackup") #&&
-        //Process("sudo /usr/share/facsimile/set-encfs-to-stream-names") #&&
-        //Process("cat /var/lib/facsimile/password") #|
-        //Process("sudo encfs --standard --stdinpass --reverse -o ro / /tmp/encryptedbackup")
-        ).
+        Process(s"sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")).
         lineStream(ProcessLogger(line => { initialMessages += line })).
         foreach(line => { initialMessages += line })
       println(initialMessages.mkString("\n"))
@@ -204,7 +220,7 @@ object Backup {
     }
   }
 
-  private def copy(source: String, destination: String, allExcludes: Seq[String], progressNotifier: (Int) => Unit): Try[Unit] = {
+  private def copy(source: String, destination: String, allExcludes: Seq[String], previousManualSnapshot: Option[String], progressNotifier: (Int) => Unit): Try[Unit] = {
     val rsyncMessages = scala.collection.mutable.ArrayBuffer.empty[String]
 
     val incrementalPattern = """.*(ir-chk)=.*""".r
@@ -214,7 +230,11 @@ object Backup {
     val rsyncMessage = """rsync:\s(.*)""".r
     val excludeFilesPath = Files.createTempFile("facsimile", "config")
 
-    val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --delete --exclude-from=${excludeFilesPath.toFile.toString} --numeric-ids --delete-excluded $source/ $destination/backup/"""
+    // --inplace should not be used with manual snapshots
+    val command = """sudo nice -n 19 rsync -aHAXvv -M--fake-super --progress --omit-link-times """ +
+      s"""--delete --exclude-from=${excludeFilesPath.toFile.toString} --numeric-ids """ +
+      s"""--delete-excluded ${previousManualSnapshot.map(s => s"--link-dest=../$s").getOrElse("--inplace")} """ +
+      s"""$source/ $destination/backup/${if (previousManualSnapshot.isDefined) "in-progress" else ""}"""
 
     var completed: Long = 0
     var latestPercent: Int = 0
@@ -342,17 +362,17 @@ object Backup {
       .withLocale(Locale.ENGLISH)
       .withZone(ZoneId.systemDefault())
 
-    snapshotTimes(tempConfig)
+    snapshotTimes(tempConfig match { case x: RemoteConfiguration => x })
       .sortWith(_.toString < _.toString)
       .map(x => (x.toString, if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }))
       .toMap
   }
 
-  private def snapshotTimes(tempConfig: Configuration): Seq[Instant] = {
+  private def snapshotTimes(tempConfig: RemoteConfiguration): Seq[Instant] = {
     // TODO - detect dataset
     val dataset = "tank/backup/lune-rsnapshot"
     val length = (dataset + "@facsimile-").length
-    val output: String = s"ssh ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host} zfs list -t snapshot -r $dataset" !!
+    val output: String = s"ssh ${tempConfig.user}@${tempConfig.host} zfs list -t snapshot -r $dataset" !!
 
     var current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
@@ -362,7 +382,7 @@ object Backup {
       .flatMap { str => Try { Instant.parse(str.substring(length, length + 24)) }.toOption }
   }
 
-  private def cullSnapshots(currentSnapshot: Instant, tempConfig: Configuration): Try[Unit] = {
+  private def cullSnapshots(currentSnapshot: Instant, tempConfig: RemoteConfiguration): Try[Unit] = {
     Try {
       // keep all hourly snapshots for last 24 hours
       // keep all daily backups for the last month
@@ -395,7 +415,7 @@ object Backup {
           if (set.contains(bucket)) {
             // TODO - replace hardcoded dataset path with actual dataset path
             val dataset = "tank/backup/lune-rsnapshot"
-            val command = s"ssh ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host} zfs destroy ${dataset}@facsimile-$snapshotDate"
+            val command = s"ssh ${tempConfig.user}@${tempConfig.host} zfs destroy ${dataset}@facsimile-$snapshotDate"
             println(s"deleting snapshot $snapshotDate with $command")
             command !!
           } else {
@@ -407,6 +427,7 @@ object Backup {
   }
 
   def getSnapshotFiles(snapshot: String, directory: String, tempConfig: Configuration): Seq[SnapshotFile] = {
+    val fixedPath = tempConfig.target match { case x: FixedPath => x }
     var fileList = false
     val startLine = """\[(R)eceiver\]\sflist\sstart.*""".r
     val endLine = """(r)ecv_file_list\sdone""".r
@@ -418,9 +439,10 @@ object Backup {
       } else {
         Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $directory").lineStream.mkString("")
       }
-      Process(s"sudo nice -n 19 rsync --dry-run -lptgoDHAXvvvv --dirs -M--fake-super --numeric-ids ${tempConfig.remoteConfiguration.user}@${tempConfig.remoteConfiguration.host}:${tempConfig.remoteConfiguration.path}/.zfs/snapshot/facsimile-$snapshot/backup/$actualDirectory/ /tmp/Desktop/").
+      val remote = tempConfig match { case x: RemoteConfiguration => x }
+      Process(s"sudo nice -n 19 rsync --dry-run -lptgoDHAXvvvv --dirs -M--fake-super --numeric-ids ${remote.user}@${remote.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup/$actualDirectory/ /tmp/Desktop/").
         // TODO - do not ignore errors
-      // TODO - if the directory which is being listed does not have r and x for the user running facsimile, then refuse to go into directory
+        // TODO - if the directory which is being listed does not have r and x for the user running facsimile, then refuse to go into directory
         lineStream(ProcessLogger(_ => {})).flatMap { line =>
           line match {
             case startLine(x) if !fileList => { fileList = true; None }
@@ -460,27 +482,28 @@ object Backup {
       val encodedPath = Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $backupPath").lineStream.mkString("").replaceAll("/$", "")
 
       System.out.println(s"encoded path $encodedPath")
-      val (tempLocalBackupPath, tempEncfsFile) = if (config.configurationType == "remote") {
-        val rc = config.remoteConfiguration
-        val tempEncfsFile = Files.createTempFile("facsimile-tempencfs", "file")
+      val (tempLocalBackupPath, tempEncfsFile) = config match {
+        case rc: RemoteConfiguration => {
+          val tempEncfsFile = Files.createTempFile("facsimile-tempencfs", "file")
 
-        // 2) encfs mount from a new temp backup directory to temp restore directory
-        val tempLocalBackupPath = Files.createTempDirectory("facsimile-tempbackuppath")
-        new java.io.File(tempLocalBackupPath.toString)
+          // 2) encfs mount from a new temp backup directory to temp restore directory
+          val tempLocalBackupPath = Files.createTempDirectory("facsimile-tempbackuppath")
+          new java.io.File(tempLocalBackupPath.toString)
 
-        val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${rc.path}/.zfs/snapshot/facsimile-$snapshot/backup/$encodedPath $tempLocalBackupPath/"""
+          var fixedPath = config.target match { case x: FixedPath => x }
 
-        System.out.println(s"about to run $command")
-        System.out.println(Process(command).lineStream.mkString(" "))
+          val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup/$encodedPath $tempLocalBackupPath/"""
 
-        val command2 = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${rc.path}/.zfs/snapshot/facsimile-$snapshot/encfs_config $tempEncfsFile"""
+          System.out.println(s"about to run $command")
+          System.out.println(Process(command).lineStream.mkString(" "))
 
-        System.out.println(s"about to run $command2")
-        System.out.println(Process(command2).lineStream.mkString(" "))
+          val command2 = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/encfs_config $tempEncfsFile"""
 
-        (tempLocalBackupPath, tempEncfsFile)
-      } else {
-        throw new RuntimeException("Local configuration type not yet supported")
+          System.out.println(s"about to run $command2")
+          System.out.println(Process(command2).lineStream.mkString(" "))
+
+          (tempLocalBackupPath, tempEncfsFile)
+        }
       }
 
       try {

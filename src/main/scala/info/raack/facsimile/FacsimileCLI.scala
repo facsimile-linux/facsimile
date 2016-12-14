@@ -19,6 +19,8 @@
 
 package info.raack.facsimile
 
+import java.io.InputStream
+
 import scala.collection.JavaConverters.mapAsJavaMapConverter
 import scala.collection.JavaConverters.mapAsScalaMapConverter
 import scala.io.Source
@@ -26,23 +28,29 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
+import org.json4s.DefaultFormats
 import org.json4s.NoTypeHints
-import org.json4s.jackson.JsonMethods.parse
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 
 object FacsimileCLI extends App {
+  sys.exit(new FacsimileCLIProcessor().process(args))
+}
+
+class FacsimileCLIProcessor(is: InputStream = System.in) {
 
   val facsimile = new Facsimile()
 
-  sys.exit(args.mkString(" ") match {
-    case "" => {
-      // wait for commands
-      print("Welcome to Facsimile!\n> ")
-      Source.stdin.getLines.map(x => { val o = process(x); if (o == None) { print("> ") }; o }).collectFirst({ case Some(x) => x }).getOrElse(0)
+  def process(args: Array[String]): Int = {
+    args.mkString(" ") match {
+      case "" => {
+        // wait for commands
+        print("Welcome to Facsimile!\n> ")
+        Source.stdin.getLines.map(x => { val o = process(x); if (o == None) { print("> ") }; o }).collectFirst({ case Some(x) => x }).getOrElse(0)
+      }
+      case command => process(command).getOrElse(0)
     }
-    case command => process(command).getOrElse(0)
-  })
+  }
 
   private def process(command: String): Option[Int] = {
     implicit val formats = Serialization.formats(NoTypeHints)
@@ -56,12 +64,17 @@ object FacsimileCLI extends App {
       case "list-snapshots" => { println(write(facsimile.snapshots())); None }
       case listSnapshotFiles(snapshot, dir) => { println(write(facsimile.getSnapshotFiles(snapshot, dir))); None }
       case restoreSnapshotFiles(snapshot, backupPath, restorePath) => { handleBackupOutput(facsimile.restoreSnapshotFiles(snapshot, backupPath, restorePath)) }
-      case "get-configuration" => { println(write(facsimile.configuration())); None }
-      case "set-configuration" => { facsimile.configuration(parse(Source.stdin.getLines.mkString("")).extract[Configuration]); None }
+      case "get-configuration" => { println(facsimile.getConfiguration()); None }
+      case "test-configuration" => { println(facsimile.testConfiguration(createConfigurationFromInput())); None }
+      case "set-configuration" => { facsimile.setConfiguration(createConfigurationFromInput()); None }
       case "help" => { println(help); None }
       case "exit" => Some(0)
       case other => { println(s"$other is not a valid command.\n${help}"); None }
     }
+  }
+
+  private def createConfigurationFromInput(): String = {
+    Source.fromInputStream(is).mkString
   }
 
   private def handleBackupOutput(output: Try[Unit]): Option[Int] = {

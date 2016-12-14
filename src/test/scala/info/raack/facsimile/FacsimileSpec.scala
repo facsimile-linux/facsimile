@@ -19,7 +19,7 @@
 
 package info.raack.facsimile
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.io.PrintStream
 
 import java.nio.file.Files
@@ -33,6 +33,13 @@ import org.scalatest.GivenWhenThen
 
 class FacsimileSpec extends FeatureSpec with GivenWhenThen {
 
+  def runFacsimile(processor: FacsimileCLIProcessor, args: Array[String], input: Option[String] = None): (Int, String) = {
+    val baos = new ByteArrayOutputStream
+    val ps = new PrintStream(baos)
+    val out = Console.withOut(ps)(Console.withErr(ps)(processor.process(args)))
+    (out, baos.toString())
+  }
+
   info("As a Facsimile user")
   info("I want to be run backups")
   info("So I can ensure that my data is safe in case of data loss")
@@ -43,9 +50,6 @@ class FacsimileSpec extends FeatureSpec with GivenWhenThen {
       Given("a command line instance is available")
 
       When("the help command is given")
-      val baos = new ByteArrayOutputStream
-      val ps = new PrintStream(baos)
-      Console.withOut(ps)(Console.withErr(ps)(FacsimileCLI.main(Array("help"))))
 
       Then("help should be printed out")
       val help = """
@@ -62,7 +66,85 @@ Possible values for COMMAND
 
 """
 
-      assertResult(help) { baos.toString }
+      assertResult((0, help)) { runFacsimile(new FacsimileCLIProcessor(), Array("help")) }
+    }
+  }
+
+  feature("Configuration") {
+
+    def testReadWriteConfig(inputConfig: String): Unit = {
+      testReadWriteConfigDifferent(inputConfig, inputConfig)
+    }
+
+    def testReadWriteConfigDifferent(inputConfig: String, outputConfig: String): Unit = {
+      val dir = Files.createTempDirectory("facsimile-temppath")
+      new File(dir.toString()).deleteOnExit()
+      System.setProperty("testingConfigDir", dir.toString)
+
+      Given("a command line instance is available")
+
+      When("remote configuration is written")
+
+      Then("it is accepted correctly")
+
+      val bais = new ByteArrayInputStream(inputConfig.getBytes())
+
+      assertResult((0, "")) { runFacsimile(new FacsimileCLIProcessor(bais), Array("set-configuration")) }
+
+      val output = s"$outputConfig\n"
+
+      When("configuration is re-read")
+      Then("it matches what was provided")
+      // it is critical to NOT re-use the existing FacsimileCLIProcessor to ensure that config doesn't get cached from
+      // the previous set operation above
+      assertResult((0, output)) { runFacsimile(new FacsimileCLIProcessor(bais), Array("get-configuration")) }
+    }
+
+    scenario("Gets empty configuration") {
+      val dir = Files.createTempDirectory("facsimile-temppath")
+      new File(dir.toString()).deleteOnExit()
+      System.setProperty("testingConfigDir", dir.toString)
+
+      Given("a command line instance is available")
+
+      When("configuration is requested")
+
+      Then("configuration should be printed out")
+      val output = """{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"FixedPath","path":"/tmp"}}}
+"""
+
+      assertResult((0, output)) { runFacsimile(new FacsimileCLIProcessor(), Array("get-configuration")) }
+    }
+
+    scenario("Writes and re-reads v1 local fixed-path configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"FixedPath","path":"/test"}}}""")
+    }
+
+    scenario("Writes and re-reads v1 local partition configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"Partition","id":"the-other-id"}}}""")
+    }
+
+    scenario("Writes and re-reads v1 local whole disk configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"WholeDisk","uuid":"a29ef9fa-9449-4ebf-a43e-4173d7e0c3d9"}}}""")
+    }
+
+    scenario("Writes and re-reads v1 remote fixed-path configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"FixedPath","path":"/blah"}}}""")
+    }
+
+    scenario("Writes and re-reads v1 remote partition configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"Partition","id":"this-is-the-id"}}}""")
+    }
+
+    scenario("Writes and re-reads v1 remote whole disk configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"WholeDisk","uuid":"f20f81de-b563-494f-905d-99bf98e23c13"}}}""")
+    }
+
+    scenario("Upgrades version 1 to version 2") {
+      testReadWriteConfigDifferent(
+        """{"automaticBackups":true,"remoteConfiguration":{"host":"theremotehost","user":"testuser","path":"/some/long/path"},"configurationType":"remote"}""",
+        """{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":true,"host":"theremotehost","user":"testuser","target":{"jsonClass":"FixedPath","path":"/some/long/path"}}}"""
+      )
     }
   }
 }
