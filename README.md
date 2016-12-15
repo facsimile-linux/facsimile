@@ -63,3 +63,13 @@ Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBu
 * To release a new major version
   * `./makedeb-src.sh <package> <version>`
     * This will create and upload source packages to [the repository in Launchpad](https://launchpad.net/~track16/+archive/ubuntu/ppa/+packages). Note that the version specified must be a git reference (preferrably a tag).
+    
+### TODO
+
+* Maintain system-wide encfsctl process for encrypting / decrypting pathnames on the fly (for speed increase)
+* Build local, fixed path mode (link-dest-based)
+ * Proper config load / save
+ * Backup
+* Build local, whole disk mode (link-dest-based)
+ * Proper config load / save
+ * Backup
