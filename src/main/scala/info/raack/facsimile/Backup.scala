@@ -128,7 +128,7 @@ object Backup {
 
         val absoluteHomeExcludes: Seq[String] = Process("cut -d: -f6,7 /etc/passwd").lineStream.
           map(_.split(":")).
-          filter(tuple => !Seq("/bin/false", "/usr/sbin/nologin", "/bin/sync").contains(tuple(1))).
+          filter(tuple => !Seq("/bin/false", "/usr/sbin/nologin", "/bin/sync").contains(if (tuple.length > 1) tuple(1) else "")).
           map(_(0)).
           flatMap(homedir => defaultHomeExcludes.map(exclude => s"$homedir/$exclude"))
         val allExcludes = (absoluteHomeExcludes ++ defaultExcludes ++ customExcludes)
@@ -172,9 +172,9 @@ object Backup {
           val dataset = "tank/backup/lune-rsnapshot"
           val command2 = s"ssh ${remote.user}@${remote.host} ${zfsPrefix} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
           println(command2)
-          val output2 = command2 !!
-
-          cullSnapshots(snapshotInstant, remote)
+          runRemoteCommand(command2, "Could not take snapshot").flatMap { s =>
+            cullSnapshots(snapshotInstant, remote)
+          }
         }
 
         Files.delete(tempBackupLogPath)
@@ -212,10 +212,9 @@ object Backup {
       // TODO - get password from user
       // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK - why?
       // ONLY USE IT TEMPORARILY ONCE WHEN ENCFS CONFIG FILE IS MISSING
-      println(s"running sudo mkdir -p $destination && cat $configDir/password | sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")
+      println(s"running sudo mkdir -p $destination &&  sudo $prefix encfs --standard --extpass='${facsimileShareDir}/facsimile-password' $extraOptions $source $destination")
       (Process(s"sudo mkdir -p $destination") #&&
-        Process(s"cat $configDir/password") #|
-        Process(s"sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")).
+        Process(s"sudo $prefix encfs --standard --extpass='${facsimileShareDir}/facsimile-password' $extraOptions $source $destination")).
         lineStream(ProcessLogger(line => { initialMessages += line })).
         foreach(line => { initialMessages += line })
       println(initialMessages.mkString("\n"))
@@ -282,7 +281,8 @@ object Backup {
     val fw = new FileWriter(tempBackupLogPath.toFile().getAbsolutePath)
 
     val excludeMessage = Try {
-      val encryptedExcludes = allExcludes.par.flatMap(exclude => Process(s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' / $exclude").lineStream)
+      val encryptedExcludes = allExcludes.par.flatMap(exclude =>
+        Process(s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' $sourceBackupDir $exclude").lineStream)
       Files.write(excludeFilesPath, encryptedExcludes.mkString("\n").getBytes)
     }.recoverWith {
       case e =>
@@ -341,15 +341,16 @@ object Backup {
     }
   }
 
-  private def runRemoteCommand(command: String, errorString: String): Try[Unit] = {
+  private def runRemoteCommand(command: String, errorString: String): Try[String] = {
     runRemoteProcess(Process(command), errorString)
   }
 
-  private def runRemoteProcess(processBuilder: scala.sys.process.ProcessBuilder, errorString: String): Try[Unit] = {
+  private def runRemoteProcess(processBuilder: scala.sys.process.ProcessBuilder, errorString: String): Try[String] = {
     val commandOutput = scala.collection.mutable.ArrayBuffer.empty[String]
 
     Try {
       processBuilder.lineStream(ProcessLogger(commandOutput += _)).foreach(commandOutput += _)
+      commandOutput.mkString("\n")
     }.recoverWith { case e => Failure(new RuntimeException(s"$errorString; ${commandOutput.mkString("\n")}")) }
   }
 
@@ -385,14 +386,20 @@ object Backup {
     // TODO - detect dataset
     val dataset = "tank/backup/lune-rsnapshot"
     val length = (dataset + "@facsimile-").length
-    val output: String = s"ssh ${tempConfig.user}@${tempConfig.host} ${zfsPrefix} zfs list -t snapshot -r $dataset" !!
+    runRemoteCommand(
+      s"ssh ${tempConfig.user}@${tempConfig.host} ${zfsPrefix} zfs list -t snapshot -r $dataset",
+      "Could not get snapshot list"
+    ) match {
+        case Success(output) => {
+          var current = Instant.now()
+          val oneDayBack = current.minus(1, ChronoUnit.DAYS)
+          val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
 
-    var current = Instant.now()
-    val oneDayBack = current.minus(1, ChronoUnit.DAYS)
-    val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
-
-    output.split("\n")
-      .flatMap { str => Try { Instant.parse(str.substring(length, length + 24)) }.toOption }
+          output.split("\n")
+            .flatMap { str => Try { Instant.parse(str.substring(length, length + 24)) }.toOption }
+        }
+        case Failure(ex) => throw ex
+      }
   }
 
   private def cullSnapshots(currentSnapshot: Instant, tempConfig: RemoteConfiguration): Try[Unit] = {
@@ -450,7 +457,7 @@ object Backup {
       val actualDirectory = if (directory == "/") {
         "/"
       } else {
-        Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $directory").lineStream.mkString("")
+        Process(s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' -- $sourceBackupDir $directory").lineStream.mkString("")
       }
       val remote = tempConfig match { case x: RemoteConfiguration => x }
       Process(s"sudo nice -n 19 rsync --dry-run -lptgoDHAXvvvv --dirs -M--fake-super --numeric-ids ${remote.user}@${remote.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup/$actualDirectory/ /tmp/Desktop/").
@@ -465,7 +472,7 @@ object Backup {
           }
         }.par.filter(_.name != "./").map { file =>
           val fullPath = s"${actualDirectory.replaceAll("/$", "")}/${file.name}"
-          file.copy(name = Process(s"sudo encfsctl decode --extpass='/usr/share/facsimile/facsimile-password' -- / $fullPath").
+          file.copy(name = Process(s"sudo encfsctl decode --extpass='${facsimileShareDir}/facsimile-password' -- / $fullPath").
             lineStream.mkString("").replaceAll("/$", "").replaceFirst(".*/(\\S+)", "$1"))
         }.seq
     } match {
@@ -492,7 +499,7 @@ object Backup {
 
     // 3) rsync
     val restore = Try {
-      val encodedPath = Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' -- / $backupPath").lineStream.mkString("").replaceAll("/$", "")
+      val encodedPath = Process(s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' -- / $backupPath").lineStream.mkString("").replaceAll("/$", "")
 
       System.out.println(s"encoded path $encodedPath")
       val (tempLocalBackupPath, tempEncfsFile) = config match {

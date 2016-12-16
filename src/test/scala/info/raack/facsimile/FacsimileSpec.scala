@@ -25,12 +25,16 @@ import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.time.format.DateTimeFormatter
 import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.temporal.ChronoField
 
 import scala.util.Try
 import scala.sys.process.stringToProcess
 import scala.sys.process.Process
 
+import org.json4s.jackson.JsonMethods.parse
 import org.scalatest.FeatureSpec
 import org.scalatest.GivenWhenThen
 
@@ -159,12 +163,8 @@ Possible values for COMMAND
 
   feature("backup / restore") {
     scenario("Can backup to location") {
+      Given("an ssh fixed-path configuration")
       setFlexCache()
-      Given("a command line instance is available")
-
-      When("backup is requested")
-
-      Then("it backs up files in the desired location")
 
       val theuser = System.getProperty("user.name")
 
@@ -180,17 +180,17 @@ Possible values for COMMAND
 
       // initialize ZFS filesystem for snapshots
       // clean up in case last run did not for some reason
-      "sudo zpool export tank".!
-      "rm /tmp/zfsfile".!
+      "sudo zpool export tank".lineStream_!
+      "rm /tmp/zfsfile".lineStream_!
       assertResult(0)("fallocate -l 500M /tmp/zfsfile".!)
       Try {
-        assertResult(0)("sudo zpool create tank /tmp/zfsfile".!)
-        assertResult(0)("sudo zfs create tank/backup".!)
-        assertResult(0)("sudo zfs create tank/backup/lune-rsnapshot".!)
-        assertResult(0)("sudo zfs set mountpoint=/tmp/testmount tank/backup/lune-rsnapshot".!)
-        assertResult(0)(s"sudo chown $theuser /tmp/testmount".!)
-        assertResult(0)(s"sudo zfs allow $theuser mount,destroy tank/backup/lune-rsnapshot".!)
-        assertResult(0)("sudo rsync -aHAXv /bin/ /tmp/sourcebin/".!)
+        "sudo zpool create tank /tmp/zfsfile".!!
+        "sudo zfs create tank/backup".!!
+        "sudo zfs create tank/backup/lune-rsnapshot".!!
+        "sudo zfs set mountpoint=/tmp/testmount tank/backup/lune-rsnapshot".!!
+        s"sudo chown $theuser /tmp/testmount".!!
+        s"sudo zfs allow $theuser mount,destroy tank/backup/lune-rsnapshot".!!
+        "sudo rsync -aHAXv /bin/ /tmp/sourcebin/".!!
 
         // write configuration for this ZFS remote
         Files.write(
@@ -198,14 +198,30 @@ Possible values for COMMAND
           s"""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"localhost","user":"$theuser","target":{"jsonClass":"FixedPath","path":"/tmp/testmount"}}}""".getBytes
         )
 
+        Files.write(Paths.get("src/main/shell/facsimile-password"), s"""#!/usr/bin/env bash\n\ncat ${Paths.get(configDir.toString, "password")}\n""".getBytes)
         Files.write(Paths.get(configDir.toString, "password"), "thepassword".getBytes)
         System.setProperty("testingSourceDir", "/tmp/sourcebin")
 
         // run the backup
+        When("backup is requested")
+
+        Then("it backs up files correctly")
         assertResult(0) { runFacsimile(new FacsimileCLIProcessor(), Array("backup"))._1 }
 
-        // TODO - verify that a single snapshot exists
-        //assertResult((0, "the one snapshot")) { runFacsimile(new FacsimileCLIProcessor(), Array("list-snapshots")) }
+        // verify that a single snapshot exists
+        When("the list of snapshots are requested")
+        val output = runFacsimile(new FacsimileCLIProcessor(), Array("list-snapshots"))
+
+        Then("a list of snapshots is retured correctly")
+        implicit val formats = org.json4s.DefaultFormats
+        assert(0 == output._1)
+        val snapshots = parse(output._2).extract[Map[String, String]]
+        assert(1 == snapshots.keys.size)
+        val date = ZonedDateTime.parse(snapshots.keys.head, DateTimeFormatter.ISO_DATE_TIME)
+        val now = ZonedDateTime.now()
+        assert(now.minusSeconds(10).isBefore(date))
+        assert(date.isBefore(now))
+        assertResult(s"Today, ${now.format(DateTimeFormatter.ofPattern("h:mm a"))}")(snapshots.values.head)
 
         // TODO - verify that listing snapshot files works
 
