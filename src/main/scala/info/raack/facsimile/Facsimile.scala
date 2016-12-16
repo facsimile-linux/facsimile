@@ -47,11 +47,14 @@ class Facsimile {
   val configDir = Option(System.getProperty("testingConfigDir")).map(Paths.get(_))
     .getOrElse(FileSystems.getDefault().getPath("/", "var", "lib", "facsimile"))
 
-  val statusPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "status")
+  val cacheDir = Option(System.getProperty("testingCacheDir")).map(Paths.get(_))
+    .getOrElse(FileSystems.getDefault().getPath("/", "var", "cache", "facsimile"))
+
+  val statusPath = Paths.get(cacheDir.toString(), "status")
   val lockFilePath = FileSystems.getDefault().getPath("/", "var", "lock", "facsimile")
   val configPath = configDir.resolve("config")
-  val lastStartTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "lastStartTime")
-  val totalTimePath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "totaltime")
+  val lastStartTimePath = Paths.get(cacheDir.toString(), "lastStartTime")
+  val totalTimePath = Paths.get(cacheDir.toString(), "totaltime")
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
 

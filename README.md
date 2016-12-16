@@ -22,6 +22,20 @@ https://wiki.debian.org/Java/Packaging
 
 Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBuilder
 
+### Testing
+
+#### TravisCI
+
+All commits will automatically tested by TravisCI, and failures to build will be mailed to the commit author.
+
+#### Locally
+
+Before running tests locally, the local environment needs to be set up once. Follow all instructions in the
+`.travis.yml` file in the `before_script` section; if all commands return 0 exit codes, then you are ready to run
+the tests.
+
+Run all tests with `activator test`.
+
 ### Publishing
  
 * To create a new release candidate branch and release:

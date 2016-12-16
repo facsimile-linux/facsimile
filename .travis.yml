@@ -1,3 +1,5 @@
+dist: trusty
+sudo: required
 language: scala
 jdk:
   - oraclejdk8
@@ -5,6 +7,19 @@ scala:
   - 2.11.7
 cache:
   directories:
-  - $HOME/.ivy2
+  - $HOME/.ivy2 
+before_script:
+  - sudo add-apt-repository ppa:zfs-native/stable -y
+  - sudo apt-get update
+  - sudo apt-get install build-essential linux-headers-`uname -r`
+  - sudo apt-get install ubuntu-zfs openssh-server openssh-client rsync coreutils libc-bin util-linux encfs
+  - sudo /sbin/modprobe zfs
+  - sudo zpool status
+  - ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa
+  - cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+  - ssh-keygen -R localhost
+  - ssh-keyscan localhost >> ~/.ssh/known_hosts
+  - ssh localhost date # keeping this line ensures that a failure in ssh keying will show up as a CI hung build
+  - sudo whoami
 script: "sbt ++$TRAVIS_SCALA_VERSION clean coverage test"
 after_success: "sbt coverageReport coveralls"

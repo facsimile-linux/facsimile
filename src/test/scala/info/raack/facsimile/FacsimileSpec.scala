@@ -24,9 +24,12 @@ import java.io.PrintStream
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.time.Instant
 
+import scala.util.Try
 import scala.sys.process.stringToProcess
+import scala.sys.process.Process
 
 import org.scalatest.FeatureSpec
 import org.scalatest.GivenWhenThen
@@ -70,35 +73,41 @@ Possible values for COMMAND
     }
   }
 
-  feature("Configuration") {
+  def testReadWriteConfig(inputConfig: String, givenWhenThen: Boolean = true): Unit = {
+    testReadWriteConfigDifferent(inputConfig, inputConfig, givenWhenThen)
+  }
 
-    def testReadWriteConfig(inputConfig: String): Unit = {
-      testReadWriteConfigDifferent(inputConfig, inputConfig)
-    }
+  def setFlexCache(): Unit = {
+    val dir = Files.createTempDirectory("facsimile-cachepath")
+    new File(dir.toString()).deleteOnExit()
+    System.setProperty("testingCacheDir", dir.toString)
+  }
 
-    def testReadWriteConfigDifferent(inputConfig: String, outputConfig: String): Unit = {
-      val dir = Files.createTempDirectory("facsimile-temppath")
-      new File(dir.toString()).deleteOnExit()
-      System.setProperty("testingConfigDir", dir.toString)
+  def testReadWriteConfigDifferent(inputConfig: String, outputConfig: String, givenWhenThen: Boolean = true): Unit = {
+    val dir = Files.createTempDirectory("facsimile-temppath")
+    new File(dir.toString()).deleteOnExit()
+    System.setProperty("testingConfigDir", dir.toString)
 
+    if (givenWhenThen) {
       Given("a command line instance is available")
-
       When("remote configuration is written")
-
       Then("it is accepted correctly")
-
-      val bais = new ByteArrayInputStream(inputConfig.getBytes())
-
-      assertResult((0, "")) { runFacsimile(new FacsimileCLIProcessor(bais), Array("set-configuration")) }
-
-      val output = s"$outputConfig\n"
-
-      When("configuration is re-read")
-      Then("it matches what was provided")
-      // it is critical to NOT re-use the existing FacsimileCLIProcessor to ensure that config doesn't get cached from
-      // the previous set operation above
-      assertResult((0, output)) { runFacsimile(new FacsimileCLIProcessor(bais), Array("get-configuration")) }
     }
+
+    val bais = new ByteArrayInputStream(inputConfig.getBytes())
+
+    assertResult((0, "")) { runFacsimile(new FacsimileCLIProcessor(bais), Array("set-configuration")) }
+
+    val output = s"$outputConfig\n"
+
+    When("configuration is re-read")
+    Then("it matches what was provided")
+    // it is critical to NOT re-use the existing FacsimileCLIProcessor to ensure that config doesn't get cached from
+    // the previous set operation above
+    assertResult((0, output)) { runFacsimile(new FacsimileCLIProcessor(bais), Array("get-configuration")) }
+  }
+
+  feature("Configuration") {
 
     scenario("Gets empty configuration") {
       val dir = Files.createTempDirectory("facsimile-temppath")
@@ -145,6 +154,71 @@ Possible values for COMMAND
         """{"automaticBackups":true,"remoteConfiguration":{"host":"theremotehost","user":"testuser","path":"/some/long/path"},"configurationType":"remote"}""",
         """{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":true,"host":"theremotehost","user":"testuser","target":{"jsonClass":"FixedPath","path":"/some/long/path"}}}"""
       )
+    }
+  }
+
+  feature("backup / restore") {
+    scenario("Can backup to location") {
+      setFlexCache()
+      Given("a command line instance is available")
+
+      When("backup is requested")
+
+      Then("it backs up files in the desired location")
+
+      val theuser = System.getProperty("user.name")
+
+      val dir = Files.createTempDirectory("facsimile-backuppath")
+      new File(dir.toString()).deleteOnExit()
+
+      val configDir = Files.createTempDirectory("facsimile-configpath")
+      new File(configDir.toString()).deleteOnExit()
+      System.setProperty("testingConfigDir", configDir.toString)
+
+      System.setProperty("testingFacsimileShareDir", "pwd".lineStream.mkString("") + "/src/main/shell")
+      System.setProperty("testingSnapshotPrefix", "sudo")
+
+      // initialize ZFS filesystem for snapshots
+      // clean up in case last run did not for some reason
+      "sudo zpool export tank".!
+      "rm /tmp/zfsfile".!
+      assertResult(0)("fallocate -l 500M /tmp/zfsfile".!)
+      Try {
+        assertResult(0)("sudo zpool create tank /tmp/zfsfile".!)
+        assertResult(0)("sudo zfs create tank/backup".!)
+        assertResult(0)("sudo zfs create tank/backup/lune-rsnapshot".!)
+        assertResult(0)("sudo zfs set mountpoint=/tmp/testmount tank/backup/lune-rsnapshot".!)
+        assertResult(0)(s"sudo chown $theuser /tmp/testmount".!)
+        assertResult(0)(s"sudo zfs allow $theuser mount,destroy tank/backup/lune-rsnapshot".!)
+        assertResult(0)("sudo rsync -aHAXv /bin/ /tmp/sourcebin/".!)
+
+        // write configuration for this ZFS remote
+        Files.write(
+          Paths.get(configDir.toString, "config"),
+          s"""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"localhost","user":"$theuser","target":{"jsonClass":"FixedPath","path":"/tmp/testmount"}}}""".getBytes
+        )
+
+        Files.write(Paths.get(configDir.toString, "password"), "thepassword".getBytes)
+        System.setProperty("testingSourceDir", "/tmp/sourcebin")
+
+        // run the backup
+        assertResult(0) { runFacsimile(new FacsimileCLIProcessor(), Array("backup"))._1 }
+
+        // TODO - verify that a single snapshot exists
+        //assertResult((0, "the one snapshot")) { runFacsimile(new FacsimileCLIProcessor(), Array("list-snapshots")) }
+
+        // TODO - verify that listing snapshot files works
+
+        // TODO - verify that retrieving one snapshot file works
+
+        // TODO - verify that retrieving all snapshot files works
+      } match {
+        case e =>
+          "sudo zpool export tank".!
+          "rm /tmp/zfsfile".!
+          "sudo rm -rf /tmp/sourcebin".!
+          e.get
+      }
     }
   }
 }

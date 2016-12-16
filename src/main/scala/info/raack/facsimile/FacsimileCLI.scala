@@ -80,7 +80,7 @@ class FacsimileCLIProcessor(is: InputStream = System.in) {
   private def handleBackupOutput(output: Try[Unit]): Option[Int] = {
     output match {
       case Success(x) => { println(s"Succeeded."); None }
-      case Failure(e) => { println(s"Could not backup: ${e.getMessage}"); None }
+      case Failure(e) => { println(s"Could not backup: ${e.getMessage}"); e.printStackTrace(); None }
     }
   }
 

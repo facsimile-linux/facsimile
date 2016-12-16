@@ -45,7 +45,20 @@ import scala.util.Try
 
 object Backup {
 
-  val totalPath = FileSystems.getDefault().getPath("/", "var", "cache", "facsimile", "total")
+  val sourceBackupDir = Option(System.getProperty("testingSourceDir")).getOrElse("/")
+
+  val configDir = Option(System.getProperty("testingConfigDir")).map(Paths.get(_))
+    .getOrElse(FileSystems.getDefault().getPath("/", "var", "lib", "facsimile"))
+
+  val cacheDir = Option(System.getProperty("testingCacheDir")).map(Paths.get(_))
+    .getOrElse(FileSystems.getDefault().getPath("/", "var", "cache", "facsimile"))
+
+  val facsimileShareDir = Option(System.getProperty("testingFacsimileShareDir"))
+    .getOrElse("/usr/share/facsimile")
+
+  val zfsPrefix = Option(System.getProperty("testingSnapshotPrefix")).getOrElse("")
+
+  val totalPath = Paths.get(cacheDir.toString, "total")
   val tempBackupLogPath = Files.createTempFile("facsimile-log", null)
   tempBackupLogPath.toFile().deleteOnExit()
 
@@ -140,7 +153,7 @@ object Backup {
 
         val remoteHostDestination = s"${remote.user}@${remote.host}:${fixedPath.path}"
 
-        val initialMessage = mountEncFsForBackup("/", "/tmp/encryptedbackup")
+        val initialMessage = mountEncFsForBackup(sourceBackupDir, "/tmp/encryptedbackup")
 
         val previousManualSnapshot = getPreviousManualSnapshot(remote)
 
@@ -149,7 +162,7 @@ object Backup {
         }
 
         val copyEncryptedConfigurationMessage = backupMessage.flatMap { s =>
-          runRemoteCommand(s"sudo nice -n 19 rsync -aHAXvv /.encfs6.xml $remoteHostDestination/encfs_config", "Could not copy encfs configuration file")
+          runRemoteCommand(s"sudo nice -n 19 rsync -aHAXvv $sourceBackupDir/.encfs6.xml $remoteHostDestination/encfs_config", "Could not copy encfs configuration file")
         }
 
         val logCopyMessage = copyEncryptedConfigurationMessage.flatMap { s =>
@@ -157,7 +170,7 @@ object Backup {
           val snapshotInstant = Instant.now()
           // TODO - replace hardcoded dataset path with actual dataset path
           val dataset = "tank/backup/lune-rsnapshot"
-          val command2 = s"ssh ${remote.user}@${remote.host} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
+          val command2 = s"ssh ${remote.user}@${remote.host} ${zfsPrefix} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
           println(command2)
           val output2 = command2 !!
 
@@ -199,9 +212,9 @@ object Backup {
       // TODO - get password from user
       // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK - why?
       // ONLY USE IT TEMPORARILY ONCE WHEN ENCFS CONFIG FILE IS MISSING
-      println(s"running sudo mkdir -p $destination && cat /var/lib/facsimile/password | sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")
+      println(s"running sudo mkdir -p $destination && cat $configDir/password | sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")
       (Process(s"sudo mkdir -p $destination") #&&
-        Process("cat /var/lib/facsimile/password") #|
+        Process(s"cat $configDir/password") #|
         Process(s"sudo $prefix encfs --standard --stdinpass $extraOptions $source $destination")).
         lineStream(ProcessLogger(line => { initialMessages += line })).
         foreach(line => { initialMessages += line })
@@ -269,7 +282,7 @@ object Backup {
     val fw = new FileWriter(tempBackupLogPath.toFile().getAbsolutePath)
 
     val excludeMessage = Try {
-      val encryptedExcludes = allExcludes.par.flatMap(exclude => Process(s"sudo encfsctl encode --extpass='/usr/share/facsimile/facsimile-password' / $exclude").lineStream)
+      val encryptedExcludes = allExcludes.par.flatMap(exclude => Process(s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' / $exclude").lineStream)
       Files.write(excludeFilesPath, encryptedExcludes.mkString("\n").getBytes)
     }.recoverWith {
       case e =>
@@ -372,7 +385,7 @@ object Backup {
     // TODO - detect dataset
     val dataset = "tank/backup/lune-rsnapshot"
     val length = (dataset + "@facsimile-").length
-    val output: String = s"ssh ${tempConfig.user}@${tempConfig.host} zfs list -t snapshot -r $dataset" !!
+    val output: String = s"ssh ${tempConfig.user}@${tempConfig.host} ${zfsPrefix} zfs list -t snapshot -r $dataset" !!
 
     var current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
