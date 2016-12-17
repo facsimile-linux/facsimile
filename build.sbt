@@ -19,6 +19,7 @@ lazy val testScalastyle = taskKey[Unit]("testScalastyle")
 testScalastyle := org.scalastyle.sbt.ScalastylePlugin.scalastyle.in(Test).toTask("").value
 
 (test in Test) <<= (test in Test) dependsOn testScalastyle
+testOptions in Test += Tests.Argument("-oF")
 
 // activate scalariform, with some format tweaks
 import scalariform.formatter.preferences._
