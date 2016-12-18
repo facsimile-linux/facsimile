@@ -472,7 +472,7 @@ object Backup {
           }
         }.par.filter(_.name != "./").map { file =>
           val fullPath = s"${actualDirectory.replaceAll("/$", "")}/${file.name}"
-          file.copy(name = Process(s"sudo encfsctl decode --extpass='${facsimileShareDir}/facsimile-password' -- / $fullPath").
+          file.copy(name = Process(s"sudo encfsctl decode --extpass='${facsimileShareDir}/facsimile-password' -- $sourceBackupDir $fullPath").
             lineStream.mkString("").replaceAll("/$", "").replaceFirst(".*/(\\S+)", "$1"))
         }.seq
     } match {

@@ -223,7 +223,21 @@ Possible values for COMMAND
         assert(date.isBefore(now))
         assertResult(s"Today, ${now.format(DateTimeFormatter.ofPattern("h:mm a"))}")(snapshots.values.head)
 
-        // TODO - verify that listing snapshot files works
+        // verify that listing snapshot files works
+        When("a list of files in a snapshot directory is requested")
+        val listOutput = runFacsimile(new FacsimileCLIProcessor(), Array("list-snapshot-files", snapshots.keys.head, "/"))
+
+        Then("some files are present")
+        println(s"all output: ${listOutput._2}")
+        assert(0 == listOutput._1)
+        val files = parse(listOutput._2).extract[Seq[SnapshotFile]]
+        assert(154 == files.size)
+        val umountOption = files.find(_.name == "umount")
+        assert(umountOption.isDefined)
+        val umount = umountOption.get
+        assert(!umount.isDirectory)
+        assert(umount.ownerId == 0)
+        assert(umount.sizeInBytes == Some(1234))
 
         // TODO - verify that retrieving one snapshot file works
 
