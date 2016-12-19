@@ -203,6 +203,7 @@ object Backup {
   }
 
   private def mountEncFsForRestore(source: String, destination: String, encfsConfigPath: String): Try[Unit] = {
+    System.out.println(s"encfs config path is $encfsConfigPath; ")
     mountEncFs(source, destination, s"ENCFS6_CONFIG=$encfsConfigPath", "")
   }
 
@@ -212,7 +213,7 @@ object Backup {
       // TODO - get password from user
       // NEVER STORE THE USER'S PASSWORD IN CLEARTEXT ON DISK - why?
       // ONLY USE IT TEMPORARILY ONCE WHEN ENCFS CONFIG FILE IS MISSING
-      println(s"running sudo mkdir -p $destination &&  sudo $prefix encfs --standard --extpass='${facsimileShareDir}/facsimile-password' $extraOptions $source $destination")
+      System.out.println(s"running sudo mkdir -p $destination &&  sudo $prefix encfs --standard --extpass='${facsimileShareDir}/facsimile-password' $extraOptions $source $destination")
       (Process(s"sudo mkdir -p $destination") #&&
         Process(s"sudo $prefix encfs --standard --extpass='${facsimileShareDir}/facsimile-password' $extraOptions $source $destination")).
         lineStream(ProcessLogger(line => { initialMessages += line })).
@@ -499,9 +500,11 @@ object Backup {
 
     // 3) rsync
     val restore = Try {
-      val encodedPath = Process(s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' -- / $backupPath").lineStream.mkString("").replaceAll("/$", "")
+      val command = s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' -- $sourceBackupDir $backupPath"
+      System.out.println(s"about to run $command")
+      val encodedPath = Process(command).lineStream.mkString("").replaceAll("/$", "")
 
-      System.out.println(s"encoded path $encodedPath")
+      System.out.println(s"source backup dir: $sourceBackupDir; backup path $backupPath; encoded path $encodedPath")
       val (tempLocalBackupPath, tempEncfsFile) = config match {
         case rc: RemoteConfiguration => {
           val tempEncfsFile = Files.createTempFile("facsimile-tempencfs", "file")
@@ -514,6 +517,10 @@ object Backup {
 
           val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup/$encodedPath $tempLocalBackupPath/"""
 
+          System.out.println("about to run sudo nice -n 19 zfs list -t snapshot")
+          System.out.println(Process("sudo nice -n 19 zfs list -t snapshot").lineStream.mkString(" "))
+          System.out.println(s"about to run sudo ls -al ${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup")
+          System.out.println(Process(s"sudo ls -al ${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup").lineStream.mkString("\n"))
           System.out.println(s"about to run $command")
           System.out.println(Process(command).lineStream.mkString(" "))
 

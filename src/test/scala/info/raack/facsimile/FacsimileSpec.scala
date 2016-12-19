@@ -187,15 +187,16 @@ Possible values for COMMAND
         "sudo zpool create tank /tmp/zfsfile".!!
         "sudo zfs create tank/backup".!!
         "sudo zfs create tank/backup/lune-rsnapshot".!!
-        "sudo zfs set mountpoint=/tmp/testmount tank/backup/lune-rsnapshot".!!
-        s"sudo chown $theuser /tmp/testmount".!!
+        "sudo zfs snapshot tank/backup/lune-rsnapshot@test".!!
+        "sudo ls -al /tank/backup/lune-rsnapshot/.zfs/snapshot/test".!
+        s"sudo chown $theuser /tank/backup/lune-rsnapshot".!!
         s"sudo zfs allow $theuser mount,destroy tank/backup/lune-rsnapshot".!!
         "sudo rsync -aHAXv /bin/ /tmp/sourcebin/".!!
 
         // write configuration for this ZFS remote
         Files.write(
           Paths.get(configDir.toString, "config"),
-          s"""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"localhost","user":"$theuser","target":{"jsonClass":"FixedPath","path":"/tmp/testmount"}}}""".getBytes
+          s"""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"localhost","user":"$theuser","target":{"jsonClass":"FixedPath","path":"/tank/backup/lune-rsnapshot"}}}""".getBytes
         )
 
         Files.write(Paths.get("src/main/shell/facsimile-password"), s"""#!/usr/bin/env bash\n\ncat ${Paths.get(configDir.toString, "password")}\n""".getBytes)
@@ -228,7 +229,6 @@ Possible values for COMMAND
         val listOutput = runFacsimile(new FacsimileCLIProcessor(), Array("list-snapshot-files", snapshots.keys.head, "/"))
 
         Then("some files are present")
-        println(s"all output: ${listOutput._2}")
         assert(0 == listOutput._1)
         val files = parse(listOutput._2).extract[Seq[SnapshotFile]]
         assert(154 == files.size)
@@ -239,9 +239,32 @@ Possible values for COMMAND
         assert(umount.ownerId == 0)
         assert(umount.sizeInBytes == Some(1234))
 
-        // TODO - verify that retrieving one snapshot file works
+        // verify that retrieving one snapshot file works
+        When("a restoring one file in a snapshot directory is requested")
+        val restoreDir1 = Files.createTempDirectory("facsimile-restorepath1")
+        new File(restoreDir1.toString()).deleteOnExit()
+        val restoreOutput = runFacsimile(new FacsimileCLIProcessor(), Array("restore-snapshot-files", snapshots.keys.head, "/umount", restoreDir1.toString))
 
-        // TODO - verify that retrieving all snapshot files works
+        Then("the one file is restored")
+        assert(0 == restoreOutput._1)
+        // ensure restored file is identical
+        assert(s"sudo rsync -avHAX /bin/umount ${restoreDir1.toString}/umount".lineStream.mkString("\n").contains("sending incremental file list\n\nsent"))
+
+        // verify that retrieving all snapshot files works
+        When("a restoring all files in a snapshot directory is requested")
+        val restoreDir2 = Files.createTempDirectory("facsimile-restorepath2")
+        new File(restoreDir2.toString()).deleteOnExit()
+        val restoreOutput2 = runFacsimile(new FacsimileCLIProcessor(), Array("restore-snapshot-files", snapshots.keys.head, "/", restoreDir2.toString))
+
+        Then("all files are restored")
+        assert(0 == restoreOutput2._1)
+        // ensure restored files are identical
+        System.out.println("original dir")
+        "sudo ls -al /bin".!
+        System.out.println("restored dir")
+        s"sudo ls -al ${restoreDir2.toString}".!
+        assert(s"sudo rsync -avHAX /bin/ ${restoreDir2.toString}/".lineStream.mkString("\n").contains("sending incremental file list\n./\n\nsent"))
+
       } match {
         case e =>
           "sudo zpool export tank".!
