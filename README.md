@@ -87,3 +87,6 @@ Run all tests with `activator test`.
 * Build local, whole disk mode (link-dest-based)
  * Proper config load / save
  * Backup
+* Add menu item to cancel backup in progress
+* Allow suspend and hibernate to work properly
+* Auto cancel backup if destination becomes unavailable (network disconnect, resume from suspend, etc)
