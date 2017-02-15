@@ -5,5 +5,7 @@
 facsimile ALL=(ALL) NOPASSWD: /usr/bin/nice
 facsimile ALL=(ALL) NOPASSWD: /bin/mkdir
 facsimile ALL=(ALL) NOPASSWD: /usr/bin/encfs
+facsimile ALL=(ALL) NOPASSWD: /usr/local/bin/encfs
 facsimile ALL=(ALL) NOPASSWD: /usr/bin/encfsctl
+facsimile ALL=(ALL) NOPASSWD: /usr/local/bin/encfsctl
 facsimile ALL=(ALL) NOPASSWD: /bin/fusermount
