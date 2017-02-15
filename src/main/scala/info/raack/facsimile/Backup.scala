@@ -95,7 +95,7 @@ object Backup {
    */
 
   // TODO - allow status callbacks so CLI can have information and print it there
-  def process(config: Configuration, progressNotifier: (Int) => Unit): Try[Unit] = {
+  def process(config: Configuration, progressNotifier: (Int) => Unit): Unit = {
 
     (None, None) match {
       case (s: PipedTransferSupported, d: PipedTransferSupported) if s.pipedTransferType == d.pipedTransferType => {
@@ -184,7 +184,7 @@ object Backup {
           case o => {}
         }
 
-        logCopyMessage
+        logCopyMessage.get
       }
     }
   }
@@ -219,16 +219,15 @@ object Backup {
         lineStream(ProcessLogger(line => { initialMessages += line })).
         foreach(line => { initialMessages += line })
       println(initialMessages.mkString("\n"))
-    }.recoverWith {
-      case ex =>
+    }.recoverWith { case ex =>
         val errorRegex = """Nonzero exit code: (\d+)""".r
         ex.getMessage match {
           case errorRegex(code) => {
-            code.toInt match {
-              case other => Failure(new RuntimeException(s"Encfs mount error code $other: \n${initialMessages.mkString("\n")}")) // non fatal
-            }
+            Failure(new RuntimeException(s"Encfs mount error code $code: \n${initialMessages.mkString("\n")}")) // non fatal
           }
-          case other => Failure(new RuntimeException(s"Encfs mount error:\n${initialMessages.mkString("\n")}"))
+          case other => {
+            Failure(new RuntimeException(s"Encfs mount error:\n${initialMessages.mkString("\n")}"))
+          }
         }
     }
   }
@@ -367,11 +366,6 @@ object Backup {
   def snapshots(tempConfig: Configuration): Map[String, String] = {
     val current = Instant.now()
     val oneDayBack = current.minus(1, ChronoUnit.DAYS)
-    val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
-
-    val monthFormatter = DateTimeFormatter.ofPattern("MMMM YYYY")
-      .withLocale(Locale.ENGLISH)
-      .withZone(ZoneId.systemDefault())
 
     val dayFormatter = DateTimeFormatter.ofPattern("MMMM d, YYYY")
       .withLocale(Locale.ENGLISH)
@@ -392,10 +386,6 @@ object Backup {
       "Could not get snapshot list"
     ) match {
         case Success(output) => {
-          var current = Instant.now()
-          val oneDayBack = current.minus(1, ChronoUnit.DAYS)
-          val oneMonthBack = current.minus(30, ChronoUnit.DAYS)
-
           output.split("\n")
             .flatMap { str => Try { Instant.parse(str.substring(length, length + 24)) }.toOption }
         }
@@ -464,13 +454,11 @@ object Backup {
       Process(s"sudo nice -n 19 rsync --dry-run -lptgoDHAXvvvv --dirs -M--fake-super --numeric-ids ${remote.user}@${remote.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup/$actualDirectory/ /tmp/Desktop/").
         // TODO - do not ignore errors
         // TODO - if the directory which is being listed does not have r and x for the user running facsimile, then refuse to go into directory
-        lineStream(ProcessLogger(_ => {})).flatMap { line =>
-          line match {
-            case startLine(x) if !fileList => { fileList = true; None }
-            case endLine(x) if fileList => { fileList = false; None }
-            case fileLine(name, mode, len, uid, gid, flags) if fileList => Some(SnapshotFile(name, uid.replace(",", "").toInt, Some(1234), isDir(mode)))
-            case _ => None
-          }
+        lineStream(ProcessLogger(_ => {})).flatMap {
+          case startLine(x) if !fileList => { fileList = true; None }
+          case endLine(x) if fileList => { fileList = false; None }
+          case fileLine(name, mode, len, uid, gid, flags) if fileList => Some(SnapshotFile(name, uid.replace(",", "").toInt, Some(1234), isDir(mode)))
+          case _ => None
         }.par.filter(_.name != "./").map { file =>
           val fullPath = s"${actualDirectory.replaceAll("/$", "")}/${file.name}"
           file.copy(name = Process(s"sudo encfsctl decode --extpass='${facsimileShareDir}/facsimile-password' -- $sourceBackupDir $fullPath").
@@ -492,7 +480,7 @@ object Backup {
     }
   }
 
-  def restoreSnapshotFiles(config: Configuration, snapshot: String, backupPath: String, restorePath: String): Try[Unit] = {
+  def restoreSnapshotFiles(config: Configuration, snapshot: String, backupPath: String, restorePath: String): Unit = {
     // 1) create restorePath as a directory
     Files.createDirectories(Paths.get(restorePath))
 
@@ -502,7 +490,7 @@ object Backup {
     val restore = Try {
       val command = s"sudo encfsctl encode --extpass='${facsimileShareDir}/facsimile-password' -- $sourceBackupDir $backupPath"
       System.out.println(s"about to run $command")
-      val encodedPath = Process(command).lineStream.mkString("").replaceAll("/$", "")
+      val encodedPath = Process(command).lineStream.mkString("").stripSuffix("/")
 
       System.out.println(s"source backup dir: $sourceBackupDir; backup path $backupPath; encoded path $encodedPath")
       val (tempLocalBackupPath, tempEncfsFile) = config match {
@@ -513,7 +501,7 @@ object Backup {
           val tempLocalBackupPath = Files.createTempDirectory("facsimile-tempbackuppath")
           new java.io.File(tempLocalBackupPath.toString)
 
-          var fixedPath = config.target match { case x: FixedPath => x }
+          val fixedPath = config.target match { case x: FixedPath => x }
 
           val command = s"""sudo nice -n 19 rsync -aHAXvv -M--fake-super --inplace --progress --omit-link-times --numeric-ids ${rc.user}@${rc.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup/$encodedPath $tempLocalBackupPath/"""
 
@@ -550,6 +538,6 @@ object Backup {
 
     // TODO - if restoring full system, make sure root of destination is mounted elsewhere on FS, not root
 
-    restore
+    restore.get
   }
 }

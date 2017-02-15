@@ -57,13 +57,13 @@ class FacsimileCLIProcessor(is: InputStream = System.in) {
     val listSnapshotFiles = """list-snapshot-files\s+(\S+)\s+(\S+)""".r
     val restoreSnapshotFiles = """restore-snapshot-files\s+(\S+)\s+(\S+)\s+(\S+)""".r
     command match {
-      case "scheduled-backup" => handleBackupOutput(facsimile.scheduledBackup())
+      case "scheduled-backup" => handleBackupOutput(facsimile.scheduledBackup)
       case "schedule-on" => { facsimile.schedule(true); None }
       case "schedule-off" => { facsimile.schedule(false); None }
-      case "backup" => handleBackupOutput(facsimile.backup())
+      case "backup" => handleBackupOutput(facsimile.backup)
       case "list-snapshots" => { println(write(facsimile.snapshots())); None }
       case listSnapshotFiles(snapshot, dir) => { println(write(facsimile.getSnapshotFiles(snapshot, dir))); None }
-      case restoreSnapshotFiles(snapshot, backupPath, restorePath) => { handleBackupOutput(facsimile.restoreSnapshotFiles(snapshot, backupPath, restorePath)) }
+      case restoreSnapshotFiles(snapshot, backupPath, restorePath) => { handleBackupOutput(() => facsimile.restoreSnapshotFiles(snapshot, backupPath, restorePath)) }
       case "get-configuration" => { println(facsimile.getConfiguration()); None }
       case "test-configuration" => { println(facsimile.testConfiguration(createConfigurationFromInput())); None }
       case "set-configuration" => { facsimile.setConfiguration(createConfigurationFromInput()); None }
@@ -77,9 +77,9 @@ class FacsimileCLIProcessor(is: InputStream = System.in) {
     Source.fromInputStream(is).mkString
   }
 
-  private def handleBackupOutput(output: Try[Unit]): Option[Int] = {
-    output match {
-      case Success(x) => { println(s"Succeeded."); None }
+  private def handleBackupOutput(backupFcn: () => Unit): Option[Int] = {
+    Try { backupFcn() } match {
+      case Success(x) => { println("Succeeded."); None }
       case Failure(e) => { println(s"Could not backup: ${e.getMessage}"); e.printStackTrace(); None }
     }
   }

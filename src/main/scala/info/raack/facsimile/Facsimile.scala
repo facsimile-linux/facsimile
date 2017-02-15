@@ -90,46 +90,43 @@ class Facsimile {
     write(Map("time_remaining" -> minutesToCompleteOption.getOrElse("unknown")))
   }
 
-  def scheduledBackup(): Try[Unit] = {
+  def scheduledBackup(): Unit = {
     println(s"Starting up at ${Instant.now()}")
     if (shouldBackup()) {
       backup()
-    } else {
-      Success("Backup not required at this time.")
     }
   }
 
-  def backup(): Try[Unit] = {
+  def backup(): Unit = {
     Files.write(statusPath, getStatusString(None).getBytes)
     setReadAllPerms(statusPath)
     // check for presence of cron task
     createLockFile()
-    Option(FileChannel.open(lockFilePath, StandardOpenOption.WRITE).tryLock()).map { lock =>
-      try {
-        Backup.process(config, printCompletion).map { s =>
+    Option(FileChannel.open(lockFilePath, StandardOpenOption.WRITE).tryLock()) match {
+      case Some(lock) => {
+        try {
+          Backup.process(config, printCompletion)
           val endTime = System.currentTimeMillis()
           Files.write(lastStartTimePath, startTime.toString.getBytes)
           setReadAllPerms(lastStartTimePath)
           Files.write(totalTimePath, (endTime - startTime).toString.getBytes)
-          ()
+        } finally {
+          lock.release()
         }
-      } finally {
-        lock.release()
       }
-    }.getOrElse(Failure(new RuntimeException("Could not get lock")))
+      case None => new RuntimeException("Could not get lock")
+    }
   }
 
   private def createLockFile(): Unit = {
-    Try {
-      val perms = new HashSet[PosixFilePermission]()
-      perms.add(PosixFilePermission.OWNER_READ)
-      perms.add(PosixFilePermission.OWNER_WRITE)
-      perms.add(PosixFilePermission.GROUP_READ)
-      perms.add(PosixFilePermission.GROUP_WRITE)
-      perms.add(PosixFilePermission.OTHERS_READ)
-      perms.add(PosixFilePermission.OTHERS_WRITE)
-      Files.createFile(lockFilePath, PosixFilePermissions.asFileAttribute(perms))
-    }
+    val perms = new HashSet[PosixFilePermission]()
+    perms.add(PosixFilePermission.OWNER_READ)
+    perms.add(PosixFilePermission.OWNER_WRITE)
+    perms.add(PosixFilePermission.GROUP_READ)
+    perms.add(PosixFilePermission.GROUP_WRITE)
+    perms.add(PosixFilePermission.OTHERS_READ)
+    perms.add(PosixFilePermission.OTHERS_WRITE)
+    Files.createFile(lockFilePath, PosixFilePermissions.asFileAttribute(perms))
   }
 
   def schedule(turnOn: Boolean): Unit = {
@@ -158,7 +155,7 @@ class Facsimile {
     Backup.getSnapshotFiles(snapshot, directory, config)
   }
 
-  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Try[Unit] = {
+  def restoreSnapshotFiles(snapshot: String, backupPath: String, restorePath: String): Unit = {
     Backup.restoreSnapshotFiles(config, snapshot, backupPath, restorePath)
   }
 

@@ -14,6 +14,19 @@ compileScalastyle := org.scalastyle.sbt.ScalastylePlugin.scalastyle.in(Compile).
 
 (compile in Compile) <<= (compile in Compile) dependsOn compileScalastyle
 
+scalacOptions ++= Seq(
+  "-target:jvm-1.8",
+  "-encoding", "UTF-8",
+  "-unchecked",
+  "-deprecation",
+  "-Xfuture",
+  "-Yno-adapted-args",
+  "-Ywarn-dead-code",
+  "-Ywarn-numeric-widen",
+  "-Ywarn-value-discard",
+  "-Ywarn-unused"
+)
+
 lazy val testScalastyle = taskKey[Unit]("testScalastyle")
 
 testScalastyle := org.scalastyle.sbt.ScalastylePlugin.scalastyle.in(Test).toTask("").value
