@@ -1,7 +1,7 @@
 /**
  * This file is part of Facsimile.
  *
- * (C) Copyright 2016 Taylor Raack.
+ * (C) Copyright 2016,2017 Taylor Raack.
  *
  * Facsimile is free software: you can redistribute it and/or modify
  * it under the terms of the Affero GNU General Public License as published by
@@ -64,10 +64,24 @@ Usage: facsimile [COMMAND]
 Run Facsimile command specified as COMMAND, or enter the Facsimile shell if COMMAND is not specified.
 
 Possible values for COMMAND
-  backup                     complete a backup using the current settings
-  schedule-on                turn on scheduled backups
-  schedule-off               turn off scheduled backups
-  scheduled-backup           if a backup is required (schedule is on and enough time has past so backups are less than 25% of wall time)
+  backup
+      complete a backup using the current settings
+  schedule-on
+      turn on scheduled backups
+  schedule-off
+      turn off scheduled backups
+  scheduled-backup
+      if a backup is required (schedule is on and enough time has past so backups are less than 25% of wall time)
+  list-snapshots
+      print out all snapshots taken so far
+  list-snapshot-files <snapshot> <directory>
+      list all files in directory in snapshot
+  restore-snapshot-files <snapshot> <directory> <restore directory>
+      restore files from directory in snapshot into restore directory
+  get-configuration
+      print out the current backup configuration
+  set-configuration
+      store the configuration from standard in
   help                       print this help
   exit                       exit Facsimile
 
