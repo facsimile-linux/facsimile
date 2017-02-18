@@ -1,7 +1,7 @@
 /**
  * This file is part of Facsimile.
  *
- * (C) Copyright 2016 Taylor Raack.
+ * (C) Copyright 2016,2017 Taylor Raack.
  *
  * Facsimile is free software: you can redistribute it and/or modify
  * it under the terms of the Affero GNU General Public License as published by
@@ -119,14 +119,16 @@ class Facsimile {
   }
 
   private def createLockFile(): Unit = {
-    val perms = new HashSet[PosixFilePermission]()
-    perms.add(PosixFilePermission.OWNER_READ)
-    perms.add(PosixFilePermission.OWNER_WRITE)
-    perms.add(PosixFilePermission.GROUP_READ)
-    perms.add(PosixFilePermission.GROUP_WRITE)
-    perms.add(PosixFilePermission.OTHERS_READ)
-    perms.add(PosixFilePermission.OTHERS_WRITE)
-    Files.createFile(lockFilePath, PosixFilePermissions.asFileAttribute(perms))
+    Try {
+      val perms = new HashSet[PosixFilePermission]()
+      perms.add(PosixFilePermission.OWNER_READ)
+      perms.add(PosixFilePermission.OWNER_WRITE)
+      perms.add(PosixFilePermission.GROUP_READ)
+      perms.add(PosixFilePermission.GROUP_WRITE)
+      perms.add(PosixFilePermission.OTHERS_READ)
+      perms.add(PosixFilePermission.OTHERS_WRITE)
+      Files.createFile(lockFilePath, PosixFilePermissions.asFileAttribute(perms))
+    }
   }
 
   def schedule(turnOn: Boolean): Unit = {
