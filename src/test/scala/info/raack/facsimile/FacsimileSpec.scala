@@ -26,7 +26,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.FileSystems
-import java.nio.file.attribute.{ PosixFilePermission, PosixFilePermissions }
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.time.format.DateTimeFormatter
 import java.time.Instant
 import java.time.ZonedDateTime
@@ -104,15 +104,19 @@ Possible values for COMMAND
   }
 
   def createPreExistingLockFile(): Unit = {
-    val perms = new java.util.HashSet[PosixFilePermission]()
-    perms.add(PosixFilePermission.OWNER_READ)
-    perms.add(PosixFilePermission.OWNER_WRITE)
-    perms.add(PosixFilePermission.GROUP_READ)
-    perms.add(PosixFilePermission.GROUP_WRITE)
-    perms.add(PosixFilePermission.OTHERS_READ)
-    perms.add(PosixFilePermission.OTHERS_WRITE)
-    Files.createFile(FileSystems.getDefault().getPath("/", "var", "lock", "facsimile"),
-      PosixFilePermissions.asFileAttribute(perms))
+    Try {
+      val perms = new java.util.HashSet[PosixFilePermission]()
+      perms.add(PosixFilePermission.OWNER_READ)
+      perms.add(PosixFilePermission.OWNER_WRITE)
+      perms.add(PosixFilePermission.GROUP_READ)
+      perms.add(PosixFilePermission.GROUP_WRITE)
+      perms.add(PosixFilePermission.OTHERS_READ)
+      perms.add(PosixFilePermission.OTHERS_WRITE)
+      Files.createFile(
+        FileSystems.getDefault().getPath("/", "var", "lock", "facsimile"),
+        PosixFilePermissions.asFileAttribute(perms)
+      )
+    }
   }
 
   def testReadWriteConfigDifferent(inputConfig: String, outputConfig: String, givenWhenThen: Boolean = true): Unit = {
