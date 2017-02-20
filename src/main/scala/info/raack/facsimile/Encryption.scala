@@ -19,6 +19,8 @@
 
 package info.raack.facsimile
 
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.nio.file.Path
 import java.nio.file.Files
 
@@ -31,6 +33,11 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 object Encryption {
+  case class Crypto(process: java.lang.Process, outReader: BufferedReader, errorReader: BufferedReader)
+
+  val encoders = scala.collection.mutable.Map[String, Crypto]()
+  val decoders = scala.collection.mutable.Map[String, Crypto]()
+
   def withEncryptedDir[T](unencryptedDir: String)(block: (String, String) => T): T = {
     cryptoActionWithDir(unencryptedDir, "facsimile-temp-encrypted", "encrypted", block) { encryptedDir =>
       mountEncFsForBackup(unencryptedDir, encryptedDir)
@@ -44,29 +51,48 @@ object Encryption {
   }
 
   def encodePath(rootDir: String, unencryptedPath: String): String = {
-    cryptoActionOnPath(rootDir, unencryptedPath, "encode")
+    cryptoActionOnPath(rootDir, unencryptedPath, encoders, "encode")
   }
 
   def decodePath(rootDir: String, encryptedPath: String): String = {
-    cryptoActionOnPath(rootDir, encryptedPath, "decode")
+    cryptoActionOnPath(rootDir, encryptedPath, decoders, "decode")
   }
 
-  private def cryptoActionOnPath(rootDir: String, cryptoPath: String, cryptoCommand: String): String = {
-    val command = s"sudo encfsctl $cryptoCommand --extpass='${InternalConfiguration.facsimileShareDir}/facsimile-password' -- $rootDir $cryptoPath"
-    Try {
-      Process(command).lineStream.mkString("").stripSuffix("/")
-    }.recover {
-      case NonFatal(e) =>
-        val errorRegex = """Nonzero exit code: (\d+)""".r
-        e.getMessage match {
-          case errorRegex(code) => {
-            code.toInt match {
-              case other: Int => throw new RuntimeException(s"Encode filename error code $other") // non fatal
-            }
-          }
-          case _ => throw new RuntimeException(s"Unknown encryption error:${System.lineSeparator}${e.getMessage}")
+  private def cryptoActionOnPath(rootDir: String, cryptoPath: String, cryptos: scala.collection.mutable.Map[String, Crypto], cryptoCommand: String): String = {
+    synchronized {
+      // get the encoder for this rootDir, creating a new one if necessary
+      val crypto = cryptos.get(rootDir) match {
+        case None => {
+          val process = new ProcessBuilder("sudo", "encfsctl", cryptoCommand, s"--extpass='${InternalConfiguration.facsimileShareDir}/facsimile-password'", "--", rootDir).start()
+          val crypto = Crypto(
+            process,
+            new BufferedReader(new InputStreamReader(process.getInputStream())),
+            new BufferedReader(new InputStreamReader(process.getErrorStream()))
+          )
+          cryptos.put(rootDir, crypto)
+          crypto
         }
-    }.get
+        case Some(crypto) => crypto
+      }
+
+      // write path to external program
+      crypto.process.getOutputStream.write(cryptoPath.getBytes)
+      crypto.process.getOutputStream.write(System.lineSeparator.getBytes)
+      crypto.process.getOutputStream.flush()
+      // wait for input from program
+
+      val output = crypto.outReader.readLine()
+      if (crypto.errorReader.ready()) {
+        // there is data on the error stream
+        val error = crypto.errorReader.readLine()
+        if (!crypto.process.isAlive()) {
+          // process died; remove it from the encoder map
+          cryptos.remove(rootDir)
+        }
+        throw new RuntimeException(s"Could not $cryptoCommand path $cryptoPath; error is $error")
+      }
+      output
+    }
   }
 
   private def cryptoActionWithDir[T](cryptoBaseDir: String, dirPrefix: String, dirFunction: String, block: (String, String) => T)(function: String => Unit): T = {
