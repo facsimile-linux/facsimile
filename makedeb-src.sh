@@ -20,7 +20,7 @@ for release in ${RELEASES}; do
 	echo ""
 	echo "${PKGNAME} ${PKGVER} ${release}"
 	echo ""
-	DST=${TMP}/${PKGNAME}-${PKGVER}~${release}/
+	DST=${TMP}/${PKGNAME}-${PKGVER}/
 	mkdir ${DST}
 	cp -aR ${CURRENT}/* ${DST}
 	cd ${DST}
@@ -29,7 +29,7 @@ for release in ${RELEASES}; do
 	mv debian-${PKGNAME} debian
 
         #debian: changelog
-	sed -e "s/${PKGNAME} (.*)/${PKGNAME} (${PKGVER}~${release})/g" -e "s/unstable;/${release};/g" -i debian/changelog
+	sed -e "s/${PKGNAME} (.*)/${PKGNAME} (${PKGVER})/g" -e "s/unstable;/${release};/g" -i debian/changelog
 	
 	# build libraries
 	activator clean pack
