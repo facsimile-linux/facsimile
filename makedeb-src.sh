@@ -5,44 +5,59 @@ set -e
 if [ -z "$1" ]; then echo "package name is unset"; exit 1; fi
 if [ -z "$2" ]; then echo "version is unset"; exit 1; fi
 
-RELEASES="trusty"
-
-PKGNAME=$
+PKGNAME=$1
 PKGVER=$2
-TMP=$(mktemp -d)
 CURRENT=$(pwd)
+
+declare -A RELEASES
+declare -A PACKAGE_SCALA
+
+RELEASES=( ["precise"]="1.6" ["trusty"]="1.7" ["xenial"]="1.8" ["yakkety"]="1.8")
+PACKAGE_SCALA=( ["precise"]="yes" ["trusty"]="yes" ["xenial"]="no" ["yakkety"]="no")
 
 git stash
 
+branch=`git rev-parse --abbrev-ref HEAD`
+
 git checkout $PKGVER
 
-for release in ${RELEASES}; do
+for release in "${!RELEASES[@]}"; do
+    TMP=$(mktemp -d)
+    java_version=${RELEASES[$release]}
 	echo ""
-	echo "${PKGNAME} ${PKGVER} ${release}"
+	echo "${PKGNAME} ${PKGVER} ${release} - Java $java_version"
 	echo ""
-	DST=${TMP}/${PKGNAME}-${PKGVER}/
+	DST=${TMP}/${PKGNAME}-${PKGVER}~${release}/
 	mkdir ${DST}
 	cp -aR ${CURRENT}/* ${DST}
-	cd ${DST}
+	pushd ${DST}
+	pwd
 	mv debian/${PKGNAME} debian-${PKGNAME}
 	rm -rf debian
 	mv debian-${PKGNAME} debian
 
-        #debian: changelog
-	sed -e "s/${PKGNAME} (.*)/${PKGNAME} (${PKGVER})/g" -e "s/unstable;/${release};/g" -i debian/changelog
+    #debian: changelog
+	sed -e "s/${PKGNAME} (.*)/${PKGNAME} (${PKGVER}~${release})/g" -e "s/unstable;/${release};/g" -i debian/changelog
+	# jvm version
+	sed -e "s/target:jvm-1.8/target:jvm-$java_version/g" -i build.sbt
+	# package scala
+	if [ "${PACKAGE_SCALA[$release]}" == "no" ]; then
+	   echo "Not packaging Scala for $release"
+	   echo 'packExcludeJars := Seq("scala-actors.*\\.jar","scala-library.*\\.jar","scala-reflect.*\\.jar")' >> build.sbt
+	   sed -e "s/default-jre,/default-jre, scala-library,/g" -i debian/control
+	fi
 	
 	# build libraries
 	activator clean pack
 
 	debuild -i -S
-
 	dput ppa:track16/ppa ${TMP}/facsimile*${release}_source.changes
+
+    rm -rf ${TMP}
+
+	popd
 done
 
-rm -rf ${TMP}
-
-cd ${CURRENT}
-
-git checkout master
+git checkout $branch
 
 git stash pop

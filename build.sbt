@@ -5,7 +5,7 @@ organization := "info.raack.facsimile"
 
 version := "1.0.x-SNAPSHOT"
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.6"
 
 // activate scalastyle
 lazy val compileScalastyle = taskKey[Unit]("compileScalastyle")

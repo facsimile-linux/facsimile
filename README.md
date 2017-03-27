@@ -7,21 +7,6 @@ Snapshot backup system
 
 Each commit should include an addition or change to a line in the `debian/changelog` file. Running `dch` will set this up for you in an editor.
 
-#### Ubuntu Versions
-
-* Trusty - comes with Scala 2.9.2
-* Vivid - comes with Scala 2.9.2
-* Wily - comes with Scala 2.11.6
-* Xenial - comes with Scala 2.11.6
-
-Will need to bundle with Scala libraries for Trusty / Vivid, and require that Scala is installed and not bundle for Wily / Xenial.
-
-To ignore scala classes while assembling fat jar, do: `packExcludeJars := Seq("scala-.*\\.jar"),`
-
-https://wiki.debian.org/Java/Packaging
-
-Perhaps use a Maven build rather than SBT - https://wiki.debian.org/Java/MavenBuilder
-
 ### Testing
 
 #### TravisCI
