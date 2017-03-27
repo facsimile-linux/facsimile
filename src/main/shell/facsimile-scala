@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -e
+
+/usr/bin/scala -cp "/usr/share/facsimile/lib/*" info.raack.facsimile.FacsimileCLI $@ <&0

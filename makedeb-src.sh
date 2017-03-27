@@ -42,10 +42,13 @@ for release in "${!RELEASES[@]}"; do
 	sed -e "s/target:jvm-1.8/target:jvm-$java_version/g" -i build.sbt
 	# package scala
 	if [ "${PACKAGE_SCALA[$release]}" == "no" ]; then
-	   echo "Not packaging Scala for $release"
-	   echo 'packExcludeJars := Seq("scala-actors.*\\.jar","scala-library.*\\.jar","scala-reflect.*\\.jar")' >> build.sbt
-	   sed -e "s/default-jre,/default-jre, scala-library,/g" -i debian/control
-	fi
+	  echo "Not packaging Scala for $release"
+	  echo 'packExcludeJars := Seq("hawtjni-runtime.*\\.jar","jansi.*\\.jar","jline.*\\.jar","scala-actors.*\\.jar","scala-compiler.*\\.jar","scala-library.*\\.jar","scala-parser-combinators.*\\.jar","scalap.*\\.jar","scala-reflect.*\\.jar","scala-xml.*\\.jar")' >> build.sbt
+	  sed -e "s/default-jre,/default-jre, scala-library,/g" -i debian/control
+	  mv src/main/shell/facsimile-scala src/main/shell/facsimile
+	else
+      mv src/main/shell/facsimile-java src/main/shell/facsimile
+    fi
 	
 	# build libraries
 	activator clean pack
