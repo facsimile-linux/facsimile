@@ -50,8 +50,10 @@ for release in "${!RELEASES[@]}"; do
       mv src/main/shell/facsimile-java src/main/shell/facsimile
     fi
 	
-	# build libraries
-	activator clean pack
+	# build libraries if facsimile
+	if [ "${PKGNAME}" == "facsimile" ]; then
+      activator clean pack
+    fi
 
 	debuild -i -S
 	dput ppa:track16/ppa ${TMP}/facsimile*${release}_source.changes
