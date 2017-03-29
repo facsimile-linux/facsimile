@@ -191,6 +191,23 @@ Possible values for COMMAND
         """{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":true,"host":"theremotehost","user":"testuser","target":{"jsonClass":"FixedPath","path":"/some/long/path"}}}"""
       )
     }
+
+    scenario("Configuration files can only be read by owner") {
+      val dir = Files.createTempDirectory("facsimile-temppath")
+      new File(dir.toString()).deleteOnExit()
+      System.setProperty("testingConfigDir", dir.toString)
+
+      Given("a command line instance is available")
+      When("remote configuration is written")
+
+      val bais = new ByteArrayInputStream("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"FixedPath","path":"/test"}}}""".getBytes())
+      runFacsimile(new FacsimileCLIProcessor(bais), Array("set-configuration"))
+
+      Then("it is read only by owner")
+      val perms = Files.getPosixFilePermissions(Paths.get(dir.toString, "config"))
+      assert(!perms.contains(PosixFilePermission.GROUP_READ))
+      assert(!perms.contains(PosixFilePermission.OTHERS_READ))
+    }
   }
 
   feature("backup / restore") {

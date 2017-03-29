@@ -162,8 +162,12 @@ class Facsimile {
   }
 
   private def writeConfig(): Unit = {
+    // ensure that config can only be read by facsimile user, since it's going to contain password information
+    val perms = new HashSet[PosixFilePermission]()
+    perms.add(PosixFilePermission.OWNER_READ)
+    perms.add(PosixFilePermission.OWNER_WRITE)
+    Files.createFile(configPath, PosixFilePermissions.asFileAttribute(perms))
     Files.write(configPath, configurationResolver.serialize(config).getBytes)
-    setReadAllPerms(configPath)
   }
 
   private def setReadAllPerms(path: Path): Unit = {
