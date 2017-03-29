@@ -30,7 +30,7 @@ import threading
 import time
 
 ConfigurationWrapper = collections.namedtuple('ConfigurationWrapper', ['jsonClass', 'configuration'])
-Configuration = collections.namedtuple('Configuration', ['jsonClass','automaticBackups','host','user','target'])
+Configuration = collections.namedtuple('Configuration', ['jsonClass','automaticBackups','host','user','target','encryptionKey'])
 FixedPath = collections.namedtuple('FixedPath', ['jsonClass','path'])
 
 class ConfigurationDialog():
@@ -52,6 +52,7 @@ class ConfigurationDialog():
         self.remote_host = self.builder.get_object("remote_host")
         self.user = self.builder.get_object("user")
         self.private_key = self.builder.get_object("private_key")
+        self.encryption_key = self.builder.get_object("encryption_key")
         self.path = self.builder.get_object("path")
         
         self.private_key_contents = None
@@ -62,9 +63,10 @@ class ConfigurationDialog():
         self.remote_host.set_text(configuration.get("host", ""))
         self.user.set_text(configuration.get("user", ""))
         self.private_key.set_text("<saved>" if configuration.get("private_key_saved", False) else "")
+        self.encryption_key.set_text(configuration.get("encryptionKey", ""))
         self.path.set_text(configuration.get("target", {}).get("path", ""))
 
-        self.backup_type.set_active([row[0] for row in self.backup_type.get_model()].index("Local" if configuration.get("configurationType") == "LocalConfiguration" else "Remote"))
+        self.backup_type.set_active([row[0] for row in self.backup_type.get_model()].index("Local" if configuration.get("jsonClass") == "LocalConfigurationV2" else "Remote"))
 
         self.window.present()
     
@@ -74,17 +76,23 @@ class ConfigurationDialog():
         #self.private_key_contents = 
         
     def on_apply_clicked(self, item):
-        if not self.save_configuration_callback(
-          ConfigurationWrapper(
-            jsonClass = 'ConfigurationWrapperV1',
+        target = FixedPath(jsonClass = 'FixedPath', path = self.path.get_text())
+        if self.backup_type.get_model()[self.backup_type.get_active_iter()][0] == 'Local':
             configuration = Configuration(
+              jsonClass = 'LocalConfigurationV2',
+              automaticBackups = self.automatic_backups.get_active(),
+              target = target,
+              encryptionKey = self.encryption_key.get_text())
+        else:
+            configuration = Configuration(
+              jsonClass = 'RemoteConfigurationV2',
+              automaticBackups = self.automatic_backups.get_active(),
               host = self.remote_host.get_text(),
               user = self.user.get_text(),
-              target = FixedPath(
-                jsonClass = 'FixedPath',
-                path = self.path.get_text()),
-              automaticBackups = self.automatic_backups.get_active(),
-              jsonClass = "LocalConfiguration" if self.backup_type.get_model()[self.backup_type.get_active_iter()][0] == 'Local' else "RemoteConfiguration"))):
+              target = target,
+              encryptionKey = self.encryption_key.get_text())
+        if not self.save_configuration_callback(
+            ConfigurationWrapper(jsonClass = 'ConfigurationWrapperV2', configuration = configuration)):
             self.close_and_reset()
         else:
             # TODO - handle this in a better way in the UI
@@ -272,7 +280,7 @@ class App():
         
     def get_config_then_open_window(self):
         GLib.idle_add(self.configuration_dialog.show,
-          json.loads(subprocess.check_output(["facsimile", "get-configuration"], universal_newlines = True)).get('configuration',{}))
+          json.loads(subprocess.check_output(["pkexec", "--user", "facsimile", "facsimile", "get-configuration"], universal_newlines = True)).get('configuration',{}))
 
     def open_show_snapshots_window(self, item):
         SnapshotViewer().show()

@@ -11,7 +11,7 @@ cache:
 before_script:
   - sudo add-apt-repository ppa:zfs-native/stable -y
   - sudo apt-get update
-  - sudo apt-get install autopoint libfuse-dev libboost-serialization-dev librlog-dev
+  - sudo apt-get install autopoint jq libfuse-dev libboost-serialization-dev librlog-dev sed
   - sudo apt-get install build-essential linux-headers-`uname -r`
   - mkdir -p /tmp/encfs
   - dir=`pwd`
@@ -30,9 +30,9 @@ before_script:
   - fallocate -l 500M /tmp/zfsfile
   - sudo zpool create tank /tmp/zfsfile
   - sudo zfs create tank/backup
-  - sudo zfs create tank/backup/lune-rsnapshot
-  - sudo zfs snapshot tank/backup/lune-rsnapshot@test
-  - ls -al /tank/backup/lune-rsnapshot/.zfs/snapshot/test
+  - sudo zfs create tank/backup/eldorado
+  - sudo zfs snapshot tank/backup/eldorado@test
+  - ls -al /tank/backup/eldorado/.zfs/snapshot/test
   - sudo zfs destroy -r tank/backup
   - sudo zpool destroy tank
   - rm /tmp/zfsfile

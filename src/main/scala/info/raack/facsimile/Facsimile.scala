@@ -43,7 +43,6 @@ import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 
 class Facsimile {
-
   val configDir = Option(System.getProperty("testingConfigDir")).map(Paths.get(_))
     .getOrElse(FileSystems.getDefault().getPath("/", "var", "lib", "facsimile"))
 
@@ -58,7 +57,7 @@ class Facsimile {
   var lastPercentChange = System.currentTimeMillis()
   val startTime = System.currentTimeMillis()
 
-  val configurationResolver = new ConfigurationResolver()
+  val configurationResolver = new ConfigurationResolver(configDir)
 
   var config: Configuration = configurationResolver.resolve(Try {
     new String(Files.readAllBytes(configPath))
@@ -132,7 +131,7 @@ class Facsimile {
   }
 
   def schedule(turnOn: Boolean): Unit = {
-    config = config match { case x: RemoteConfiguration => x.copy(automaticBackups = turnOn) }
+    config = config match { case x: RemoteConfigurationV2 => x.copy(automaticBackups = turnOn) }
     writeConfig()
   }
 
@@ -166,8 +165,12 @@ class Facsimile {
     val perms = new HashSet[PosixFilePermission]()
     perms.add(PosixFilePermission.OWNER_READ)
     perms.add(PosixFilePermission.OWNER_WRITE)
-    Files.createFile(configPath, PosixFilePermissions.asFileAttribute(perms))
+    // any new files should have these permissions, but if file already exists, then apply them to current file
+    Try { Files.createFile(configPath) }
+    Files.setPosixFilePermissions(configPath, perms)
     Files.write(configPath, configurationResolver.serialize(config).getBytes)
+    // individual password file is no longer needed; delete if exists
+    Files.deleteIfExists(Paths.get(configDir.toString, "password"))
   }
 
   private def setReadAllPerms(path: Path): Unit = {

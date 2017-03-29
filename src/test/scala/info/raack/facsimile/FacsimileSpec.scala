@@ -93,8 +93,8 @@ Possible values for COMMAND
     }
   }
 
-  def testReadWriteConfig(inputConfig: String, givenWhenThen: Boolean = true): Unit = {
-    testReadWriteConfigDifferent(inputConfig, inputConfig, givenWhenThen)
+  def testReadWriteConfig(inputConfig: String): Unit = {
+    testReadWriteConfigDifferent(inputConfig, inputConfig)
   }
 
   def setFlexCache(): Unit = {
@@ -119,16 +119,16 @@ Possible values for COMMAND
     }
   }
 
-  def testReadWriteConfigDifferent(inputConfig: String, outputConfig: String, givenWhenThen: Boolean = true): Unit = {
-    val dir = Files.createTempDirectory("facsimile-temppath")
-    new File(dir.toString()).deleteOnExit()
-    System.setProperty("testingConfigDir", dir.toString)
-
-    if (givenWhenThen) {
-      Given("a command line instance is available")
-      When("remote configuration is written")
-      Then("it is accepted correctly")
+  def testReadWriteConfigDifferent(inputConfig: String, outputConfig: String, createTestingDir: Boolean = true): Unit = {
+    if (createTestingDir) {
+      val dir = Files.createTempDirectory("facsimile-temppath")
+      new File(dir.toString()).deleteOnExit()
+      System.setProperty("testingConfigDir", dir.toString)
     }
+
+    Given("a command line instance is available")
+    When("remote configuration is written")
+    Then("it is accepted correctly")
 
     val bais = new ByteArrayInputStream(inputConfig.getBytes())
 
@@ -155,47 +155,71 @@ Possible values for COMMAND
       When("configuration is requested")
 
       Then("configuration should be printed out")
-      val output = """{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"FixedPath","path":"/tmp"}}}
+      val output = """{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"LocalConfigurationV2","automaticBackups":false,"target":{"jsonClass":"FixedPath","path":"/tmp"},"encryptionKey":""}}
 """
 
       assertResult((0, output)) { runFacsimile(new FacsimileCLIProcessor(), Array("get-configuration")) }
     }
 
-    scenario("Writes and re-reads v1 local fixed-path configuration") {
-      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"FixedPath","path":"/test"}}}""")
+    scenario("Writes and re-reads v2 local fixed-path configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"LocalConfigurationV2","automaticBackups":false,"target":{"jsonClass":"FixedPath","path":"/test"},"encryptionKey":"thekey"}}""")
     }
 
-    scenario("Writes and re-reads v1 local partition configuration") {
-      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"Partition","id":"the-other-id"}}}""")
+    scenario("Writes and re-reads v2 local partition configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"LocalConfigurationV2","automaticBackups":false,"target":{"jsonClass":"Partition","id":"the-other-id"},"encryptionKey":"thekey"}}""")
     }
 
-    scenario("Writes and re-reads v1 local whole disk configuration") {
-      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"LocalConfiguration","automaticBackups":false,"target":{"jsonClass":"WholeDisk","uuid":"a29ef9fa-9449-4ebf-a43e-4173d7e0c3d9"}}}""")
+    scenario("Writes and re-reads v2 local whole disk configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"LocalConfigurationV2","automaticBackups":false,"target":{"jsonClass":"WholeDisk","uuid":"a29ef9fa-9449-4ebf-a43e-4173d7e0c3d9"},"encryptionKey":"thekey"}}""")
     }
 
-    scenario("Writes and re-reads v1 remote fixed-path configuration") {
-      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"FixedPath","path":"/blah"}}}""")
+    scenario("Writes and re-reads v2 remote fixed-path configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"RemoteConfigurationV2","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"FixedPath","path":"/blah"},"encryptionKey":"thekey"}}""")
     }
 
-    scenario("Writes and re-reads v1 remote partition configuration") {
-      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"Partition","id":"this-is-the-id"}}}""")
+    scenario("Writes and re-reads v2 remote partition configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"RemoteConfigurationV2","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"Partition","id":"this-is-the-id"},"encryptionKey":"thekey"}}""")
     }
 
-    scenario("Writes and re-reads v1 remote whole disk configuration") {
-      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"WholeDisk","uuid":"f20f81de-b563-494f-905d-99bf98e23c13"}}}""")
+    scenario("Writes and re-reads v2 remote whole disk configuration") {
+      testReadWriteConfig("""{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"RemoteConfigurationV2","automaticBackups":false,"host":"abcd","user":"testuser","target":{"jsonClass":"WholeDisk","uuid":"f20f81de-b563-494f-905d-99bf98e23c13"},"encryptionKey":"thekey"}}""")
+    }
+
+    scenario("Upgrades version 0 to version 2") {
+      val dir = Files.createTempDirectory("facsimile-temppath")
+      new File(dir.toString()).deleteOnExit()
+      System.setProperty("testingConfigDir", dir.toString)
+      Files.write(Paths.get(dir.toString(), "password"), "someotherkey".getBytes)
+      testReadWriteConfigDifferent(
+        """{"automaticBackups":true,"remoteConfiguration":{"host":"theremotehost","user":"testuser","path":"/some/long/path"},"configurationType":"remote"}""",
+        """{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"RemoteConfigurationV2","automaticBackups":true,"host":"theremotehost","user":"testuser","target":{"jsonClass":"FixedPath","path":"/some/long/path"},"encryptionKey":"someotherkey"}}""",
+        false
+      )
+      // now make sure that password file is gone, as we don't want the password stored in two different places
+      Then("original password file is removed")
+      assert(Files.exists(Paths.get(dir.toString(), "password")) == false)
     }
 
     scenario("Upgrades version 1 to version 2") {
+      val dir = Files.createTempDirectory("facsimile-temppath")
+      new File(dir.toString()).deleteOnExit()
+      System.setProperty("testingConfigDir", dir.toString)
+      Files.write(Paths.get(dir.toString(), "password"), "someotherkey".getBytes)
       testReadWriteConfigDifferent(
-        """{"automaticBackups":true,"remoteConfiguration":{"host":"theremotehost","user":"testuser","path":"/some/long/path"},"configurationType":"remote"}""",
-        """{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":true,"host":"theremotehost","user":"testuser","target":{"jsonClass":"FixedPath","path":"/some/long/path"}}}"""
+        """{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":true,"host":"theremotehost","user":"testuser","target":{"jsonClass":"FixedPath","path":"/some/long/path"}}}""",
+        """{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"RemoteConfigurationV2","automaticBackups":true,"host":"theremotehost","user":"testuser","target":{"jsonClass":"FixedPath","path":"/some/long/path"},"encryptionKey":"someotherkey"}}""",
+        false
       )
+      // now make sure that password file is gone, as we don't want the password stored in two different places
+      Then("original password file is removed")
+      assert(Files.exists(Paths.get(dir.toString(), "password")) == false)
     }
 
     scenario("Configuration files can only be read by owner") {
       val dir = Files.createTempDirectory("facsimile-temppath")
       new File(dir.toString()).deleteOnExit()
       System.setProperty("testingConfigDir", dir.toString)
+      Files.write(Paths.get(dir.toString(), "password"), "someotherkey".getBytes)
 
       Given("a command line instance is available")
       When("remote configuration is written")
@@ -237,21 +261,21 @@ Possible values for COMMAND
       Try {
         "sudo zpool create tank /tmp/zfsfile".!!
         "sudo zfs create tank/backup".!!
-        "sudo zfs create tank/backup/lune-rsnapshot".!!
-        "sudo zfs snapshot tank/backup/lune-rsnapshot@test".!!
-        "sudo ls -al /tank/backup/lune-rsnapshot/.zfs/snapshot/test".!
-        s"sudo chown $theuser /tank/backup/lune-rsnapshot".!!
-        s"sudo zfs allow $theuser mount,destroy tank/backup/lune-rsnapshot".!!
+        "sudo zfs create tank/backup/eldorado".!!
+        "sudo zfs snapshot tank/backup/eldorado@test".!!
+        "sudo ls -al /tank/backup/eldorado/.zfs/snapshot/test".!
+        s"sudo chown $theuser /tank/backup/eldorado".!!
+        s"sudo zfs allow $theuser mount,destroy tank/backup/eldorado".!!
         "sudo rsync -aHAXv /bin/ /tmp/sourcebin/".!!
 
         // write configuration for this ZFS remote
         Files.write(
           Paths.get(configDir.toString, "config"),
-          s"""{"jsonClass":"ConfigurationWrapperV1","configuration":{"jsonClass":"RemoteConfiguration","automaticBackups":false,"host":"localhost","user":"$theuser","target":{"jsonClass":"FixedPath","path":"/tank/backup/lune-rsnapshot"}}}""".getBytes
+          s"""{"jsonClass":"ConfigurationWrapperV2","configuration":{"jsonClass":"RemoteConfigurationV2","automaticBackups":false,"host":"localhost","user":"$theuser","target":{"jsonClass":"FixedPath","path":"/tank/backup/eldorado"},"encryptionKey":"makemyday"}}""".getBytes
         )
+        val command = s"""sed -e s/\\/var\\/lib\\/facsimile\\/config/${Paths.get(configDir.toString, "config").toString.replaceAll("/", """\\/""")}/ -i ${Paths.get("src/main/shell/facsimile-password")}"""
+        assert(command.! == 0)
 
-        Files.write(Paths.get("src/main/shell/facsimile-password"), s"""#!/usr/bin/env bash\n\ncat ${Paths.get(configDir.toString, "password")}\n""".getBytes)
-        Files.write(Paths.get(configDir.toString, "password"), "thepassword".getBytes)
         System.setProperty("testingSourceDir", "/tmp/sourcebin")
 
         // run the backup
@@ -282,7 +306,7 @@ Possible values for COMMAND
         Then("some files are present")
         assert(0 == listOutput._1)
         val files = parse(listOutput._2).extract[Seq[SnapshotFile]]
-        assert(154 == files.size)
+        assert(151 == files.size)
         val umountOption = files.find(_.name == "umount")
         assert(umountOption.isDefined)
         val umount = umountOption.get

@@ -31,24 +31,37 @@ sealed trait ConfigurationBase
 // v0
 
 sealed case class ConfigurationV0(var automaticBackups: Boolean, remoteConfiguration: RemoteConfigurationV0, configurationType: String)
-  extends ConfigurationBase {}
 
 sealed case class RemoteConfigurationV0(host: String, user: String, path: String)
 
 // v1
 
-case class ConfigurationWrapperV1(configuration: Configuration) extends ConfigurationBase {}
+case class ConfigurationWrapperV1(configuration: ConfigurationV1) extends ConfigurationBase {}
 
-sealed trait Configuration {
+sealed trait ConfigurationV1 {
   val automaticBackups: Boolean
   val target: Target
 }
 
-case class RemoteConfiguration(automaticBackups: Boolean, host: String, user: String, target: Target) extends Configuration
+private case class RemoteConfiguration(automaticBackups: Boolean, host: String, user: String, target: Target) extends ConfigurationV1
 
-case class LocalConfiguration(automaticBackups: Boolean, target: Target) extends Configuration
+private case class LocalConfiguration(automaticBackups: Boolean, target: Target) extends ConfigurationV1
 
-// V2 - future
+// V2
+
+case class ConfigurationWrapperV2(configuration: Configuration) extends ConfigurationBase {}
+
+sealed trait Configuration {
+  val automaticBackups: Boolean
+  val target: Target
+  val encryptionKey: String
+}
+
+case class RemoteConfigurationV2(automaticBackups: Boolean, host: String, user: String, target: Target, encryptionKey: String) extends Configuration
+
+case class LocalConfigurationV2(automaticBackups: Boolean, target: Target, encryptionKey: String) extends Configuration
+
+// V3 - future
 
 case class FilesystemCapability(nonSnapshotting: Boolean, zfs: Boolean, btrfs: Boolean)
 

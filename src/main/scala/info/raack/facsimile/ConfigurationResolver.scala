@@ -19,6 +19,10 @@
 
 package info.raack.facsimile
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+
 import scala.util.Try
 
 import org.json4s.JsonAST.JValue
@@ -31,35 +35,57 @@ import org.json4s.jackson.JsonMethods.parse
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.write
 
-class ConfigurationResolver {
-  implicit val formats = Serialization.formats(ShortTypeHints(List(classOf[LocalConfiguration], classOf[RemoteConfiguration], classOf[FixedPath], classOf[Partition], classOf[WholeDisk], classOf[ConfigurationV0], classOf[ConfigurationWrapperV1]))) ++ JavaTypesSerializers.all
+class ConfigurationResolver(configDir: Path) {
+  implicit val formats = Serialization.formats(ShortTypeHints(List(classOf[LocalConfiguration], classOf[RemoteConfiguration], classOf[LocalConfigurationV2], classOf[RemoteConfigurationV2], classOf[FixedPath], classOf[Partition], classOf[WholeDisk], classOf[ConfigurationV0], classOf[ConfigurationWrapperV1], classOf[ConfigurationWrapperV2]))) ++ JavaTypesSerializers.all
+
+  private val passwordPath = Paths.get(configDir.toString, "password")
 
   def resolve(rawConfig: String): Configuration = {
     Try {
       parse(rawConfig).extract[ConfigurationBase] match {
-        case x: ConfigurationWrapperV1 => x.configuration
+        case x: ConfigurationWrapperV2 => x.configuration
+        case y: ConfigurationWrapperV1 => y.configuration match {
+          case me: LocalConfiguration =>
+            LocalConfigurationV2(
+              automaticBackups = me.automaticBackups,
+              target = me.target,
+              encryptionKey = new String(Files.readAllBytes(passwordPath))
+            )
+          case me: RemoteConfiguration =>
+            RemoteConfigurationV2(
+              automaticBackups = me.automaticBackups,
+              host = me.host,
+              user = me.user,
+              target = me.target,
+              encryptionKey = new String(Files.readAllBytes(passwordPath))
+            )
+        }
       }
     }.recover {
-      // there may be a problem extracting a ConfigurationBase object
       case x => {
         Try {
           // attempt to extract the first type of configuration
           val configV0 = parse(rawConfig).extract[ConfigurationV0]
-          RemoteConfiguration(
+          RemoteConfigurationV2(
             automaticBackups = configV0.automaticBackups,
             host = configV0.remoteConfiguration.host,
             user = configV0.remoteConfiguration.user,
-            target = FixedPath(path = configV0.remoteConfiguration.path)
+            target = FixedPath(path = configV0.remoteConfiguration.path),
+            encryptionKey = new String(Files.readAllBytes(passwordPath))
           )
         }.recover {
-          // if that doesn't work, just create a new configuration
-          case x => LocalConfiguration(automaticBackups = false, target = FixedPath("/tmp"))
+          case y =>
+            LocalConfigurationV2(
+              automaticBackups = false,
+              target = FixedPath("/tmp"),
+              encryptionKey = ""
+            )
         }.get
       }
     }.get
   }
 
   def serialize(configuration: Configuration): String = {
-    write(ConfigurationWrapperV1(configuration))
+    write(ConfigurationWrapperV2(configuration))
   }
 }

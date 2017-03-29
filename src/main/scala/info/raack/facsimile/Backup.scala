@@ -110,7 +110,7 @@ object Backup {
         // the destination filesystem OR they can login as root
 
         // val one = s"mkdir -p $mountDir" !!
-        // val two = s"sudo sshfs root@backup:/mnt/tank/backup/lune-rsnapshot/backup/localhost/ $mountDir" !!
+        // val two = s"sudo sshfs root@backup:/mnt/tank/backup/eldorado/backup/localhost/ $mountDir" !!
 
         // backup
 
@@ -142,7 +142,7 @@ object Backup {
 
         val remote = config match {
           // TODO - will have to add case for other configs, for now it will explode if we attempt to use others
-          case x: RemoteConfiguration => x
+          case x: RemoteConfigurationV2 => x
         }
 
         val fixedPath = config.target match {
@@ -161,27 +161,30 @@ object Backup {
               Try { ShellUtils.runCommand(s"sudo nice -n 19 rsync -aHAXvv $encryptionConfig $remoteHostDestination/encryption_config", "Could not copy encryption configuration file") }
             }
 
+            val snapshotInstant = Instant.now()
+
             val logCopyMessage = copyEncryptedConfigurationMessage.flatMap { s =>
               // snapshot
-              val snapshotInstant = Instant.now()
               // TODO - replace hardcoded dataset path with actual dataset path
-              val dataset = "tank/backup/lune-rsnapshot"
+              val dataset = "tank/backup/eldorado"
               val command2 = s"ssh ${remote.user}@${remote.host} ${zfsPrefix} zfs snapshot ${dataset}@facsimile-${snapshotInstant.toString}"
               println(command2)
-              Try { ShellUtils.runCommand(command2, "Could not take snapshot") }.flatMap { s =>
-                cullSnapshots(snapshotInstant, remote)
-              }
+              Try { ShellUtils.runCommand(command2, "Could not take snapshot") }
+            }
+
+            val cullSnapshotsMessage = logCopyMessage.flatMap { s =>
+              cullSnapshots(snapshotInstant, remote)
             }
 
             Files.delete(tempBackupLogPath)
 
-            logCopyMessage.get
+            cullSnapshotsMessage.get
         }
       }
     }
   }
 
-  private def getPreviousManualSnapshot(config: RemoteConfiguration): Option[String] = {
+  private def getPreviousManualSnapshot(config: RemoteConfigurationV2): Option[String] = {
     // TODO - adjust when implementing manual (rsync link-dest-based snapshots)
     if (true == false) {
       snapshotTimes(config).map(_.toString).sortWith(_ > _).headOption
@@ -306,15 +309,15 @@ object Backup {
       .withLocale(Locale.ENGLISH)
       .withZone(ZoneId.systemDefault())
 
-    snapshotTimes(tempConfig match { case x: RemoteConfiguration => x })
+    snapshotTimes(tempConfig match { case x: RemoteConfigurationV2 => x })
       .sortWith(_.toString < _.toString)
       .map(x => (x.toString, if (x.isBefore(oneDayBack)) { dayFormatter.format(x) } else { formatHour(x) }))
       .toMap
   }
 
-  private def snapshotTimes(tempConfig: RemoteConfiguration): Seq[Instant] = {
+  private def snapshotTimes(tempConfig: RemoteConfigurationV2): Seq[Instant] = {
     // TODO - detect dataset
-    val dataset = "tank/backup/lune-rsnapshot"
+    val dataset = "tank/backup/eldorado"
     val length = (dataset + "@facsimile-").length
     Try {
       ShellUtils.runCommand(
@@ -326,7 +329,7 @@ object Backup {
     }.get
   }
 
-  private def cullSnapshots(currentSnapshot: Instant, tempConfig: RemoteConfiguration): Try[Unit] = {
+  private def cullSnapshots(currentSnapshot: Instant, tempConfig: RemoteConfigurationV2): Try[Unit] = {
     Try {
       // keep all hourly snapshots for last 24 hours
       // keep all daily backups for the last month
@@ -358,7 +361,7 @@ object Backup {
 
           if (set.contains(bucket)) {
             // TODO - replace hardcoded dataset path with actual dataset path
-            val dataset = "tank/backup/lune-rsnapshot"
+            val dataset = "tank/backup/eldorado"
             val command = s"ssh ${tempConfig.user}@${tempConfig.host} zfs destroy ${dataset}@facsimile-$snapshotDate"
             println(s"deleting snapshot $snapshotDate with $command")
             command !!
@@ -383,7 +386,7 @@ object Backup {
       } else {
         Encryption.encodePath(sourceBackupDir, directory)
       }
-      val remote = tempConfig match { case x: RemoteConfiguration => x }
+      val remote = tempConfig match { case x: RemoteConfigurationV2 => x }
       val command = s"sudo nice -n 19 rsync --dry-run -lptgoDHAXvvvv --dirs -M--fake-super --numeric-ids ${remote.user}@${remote.host}:${fixedPath.path}/.zfs/snapshot/facsimile-$snapshot/backup/$actualDirectory/ /tmp/Desktop/"
       Process(command).
         // TODO - do not ignore errors
@@ -397,10 +400,7 @@ object Backup {
           val fullPath = s"${actualDirectory.replaceAll("/$", "")}/${file.name}"
           file.copy(name = Encryption.decodePath(sourceBackupDir, fullPath).replaceAll("/$", "").replaceFirst(".*/(\\S+)", "$1"))
         }.seq
-    } match {
-      case Success(x) => x
-      case Failure(e) => Seq()
-    }
+    }.get
   }
 
   private def isDir(mode: String): Boolean = {
@@ -425,7 +425,7 @@ object Backup {
 
       System.out.println(s"source backup dir: $sourceBackupDir; backup path $backupPath; encoded path $encodedPath")
       val (tempLocalBackupPath, tempEncryptionConfigFile) = config match {
-        case rc: RemoteConfiguration => {
+        case rc: RemoteConfigurationV2 => {
           val tempEncryptionConfigFile = Files.createTempFile("facsimile-encryptionconfig", "file")
 
           // 2) decrypted mount from a new temp backup directory to temp restore directory
