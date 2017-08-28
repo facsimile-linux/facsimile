@@ -12,8 +12,8 @@ CURRENT=$(pwd)
 declare -A RELEASES
 declare -A PACKAGE_SCALA
 
-RELEASES=( ["precise"]="1.6" ["trusty"]="1.7" ["xenial"]="1.8" ["yakkety"]="1.8")
-PACKAGE_SCALA=( ["precise"]="yes" ["trusty"]="yes" ["xenial"]="no" ["yakkety"]="no")
+RELEASES=( ["trusty"]="1.7" ["xenial"]="1.8" ["yakkety"]="1.8")
+PACKAGE_SCALA=( ["trusty"]="yes" ["xenial"]="no" ["yakkety"]="no")
 
 git stash
 
